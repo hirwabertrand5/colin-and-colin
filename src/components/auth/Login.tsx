@@ -12,7 +12,7 @@ const mockUsers = {
     id: '1',
     email: 'partner@lawfirm.com',
     name: 'Gatete Colin',
-    role: 'partner' as UserRole,
+    role: 'Managing director' as UserRole,
     password: 'password',
   },
   'associate@lawfirm.com': {
@@ -26,7 +26,7 @@ const mockUsers = {
     id: '3',
     email: 'assistant@lawfirm.com',
     name: 'Mushimiyimana Janviere',
-    role: 'assistant' as UserRole,
+    role: 'Executive assistant' as UserRole,
     password: 'password',
   },
 };
