@@ -7,12 +7,13 @@ export default function UserManagement() {
 
   // ✅ Replace demo names with Rwandan context users
   const users = [
-    { id: '1', name: 'Gatete Colin', email: 'colin@colinandcolin.com', role: 'Managing Partner', status: 'Active', lastLogin: '2026-01-30 07:45' },
-    { id: '2', name: 'Karangwa Jean', email: 'karangwa@colinandcolin.com', role: 'Associate Lawyer', status: 'Active', lastLogin: '2026-01-30 08:30' },
-    { id: '3', name: 'Niyonsaba Grace', email: 'grace@colinandcolin.com', role: 'Executive Assistant', status: 'Active', lastLogin: '2026-01-29 17:12' },
-    { id: '4', name: 'Iradukunda Alex', email: 'alex@colinandcolin.com', role: 'Trainee Associate', status: 'Active', lastLogin: '2026-01-30 09:00' },
-    { id: '5', name: 'Mukamana Diane', email: 'diane@colinandcolin.com', role: 'Associate Lawyer', status: 'Inactive', lastLogin: '2026-01-20 11:00' },
-  ];
+  { id: '1', name: 'Gatete Colin', email: 'colin@colinandcolin.com', role: 'Managing Director', status: 'Active', lastLogin: '2026-01-30 07:45' },
+  { id: '2', name: 'Ninsima James', email: 'james@colinandcolin.com', role: 'Lawyer', status: 'Active', lastLogin: 'N/A' },
+  { id: '3', name: 'Kayumba Steven', email: 'steven@colinandcolin.com', role: 'Lawyer', status: 'Active', lastLogin: 'N/A' },
+  { id: '4', name: 'Manishimwe Cedrick', email: 'cedrick@colinandcolin.com', role: 'Junior Associate', status: 'Active', lastLogin: 'N/A' },
+  { id: '5', name: 'Mushimiyimana Janviere', email: 'Mjanviere@colinandcolin.com', role: 'Executive Assistant', status: 'Active', lastLogin: '2026-01-29 17:12' },
+  { id: '6', name: 'Uwase Linda', email: 'linda@colinandcolin.com', role: 'Intern', status: 'Active', lastLogin: 'N/A' },
+];
 
   const getRoleColor = (role: string) => {
     switch (role) {
