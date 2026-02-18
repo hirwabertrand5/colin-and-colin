@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import companyLogo from '../../assets/logo-colin.png'; // ✅ Import your actual firm logo
+import companyLogo from '../../assets/logo-colin.png'; 
 
 export default function ResetPassword() {
   const [email, setEmail] = useState('');

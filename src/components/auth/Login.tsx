@@ -11,22 +11,22 @@ const mockUsers = {
   'partner@lawfirm.com': {
     id: '1',
     email: 'partner@lawfirm.com',
-    name: 'Karangwa Jean',
-    role: 'managing_partner' as UserRole,
+    name: 'Gatete Colin',
+    role: 'partner' as UserRole,
     password: 'password',
   },
   'associate@lawfirm.com': {
     id: '2',
     email: 'associate@lawfirm.com',
-    name: 'Mukamana Diane',
+    name: 'Ninsima James',
     role: 'associate' as UserRole,
     password: 'password',
   },
   'assistant@lawfirm.com': {
     id: '3',
     email: 'assistant@lawfirm.com',
-    name: 'Niyonsaba Grace',
-    role: 'executive_assistant' as UserRole,
+    name: 'Mushimiyimana Janviere',
+    role: 'assistant' as UserRole,
     password: 'password',
   },
 };
