@@ -26,11 +26,7 @@ const mockUsers = {
     id: '3',
     email: 'assistant@lawfirm.com',
     name: 'Mushimiyimana Janviere',
-<<<<<<< HEAD
     role: 'Executive Assistant' as UserRole,
-=======
-    role: 'Executive assistant' as UserRole,
->>>>>>> a104e25ea9a78cf81c1a79fb9ce3dad60ebbd50f
     password: 'password',
   },
 };
