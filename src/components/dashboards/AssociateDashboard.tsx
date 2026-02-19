@@ -17,79 +17,74 @@ export default function AssociateDashboard() {
   ];
 
   const myTasks = [
-    {
-      id: '1',
-      title: 'Draft Letter of Demand',
-      case: 'Uwase vs Kigali Holdings',
-      status: 'In Progress',
-      priority: 'High',
-      dueDate: '2026-02-01',
-    },
-    {
-      id: '2',
-      title: 'Review Land Title - Uwizeye Claim',
-      case: 'Uwizeye vs City of Kigali',
-      status: 'Not Started',
-      priority: 'High',
-      dueDate: '2026-02-01',
-    },
-    {
-      id: '3',
-      title: 'Prepare Case Summary',
-      case: 'Twagirayezu Employment Matter',
-      status: 'In Progress',
-      priority: 'Medium',
-      dueDate: '2026-02-03',
-    },
-  ];
+  {
+    id: '1',
+    title: 'Draft Statement of Claim – RS/SCP/RCOM 00388/2024/TC',
+    case: 'RS/SCP/RCOM 00388/2024/TC',
+    status: 'In Progress',
+    priority: 'High',
+    dueDate: '2026-02-21',
+  },
+  {
+    id: '2',
+    title: 'Prepare Hearing Brief – RSOC 00001/2025/HC/KIG',
+    case: 'RSOC 00001/2025/HC/KIG',
+    status: 'Not Started',
+    priority: 'High',
+    dueDate: '2026-02-22',
+  },
+  {
+    id: '3',
+    title: 'Organize Client Documentation',
+    case: 'RSOC 00001/2025/HC/KIG',
+    status: 'In Progress',
+    priority: 'Medium',
+    dueDate: '2026-02-24',
+  },
+];
+
 
   const myCases = [
-    {
-      id: '1',
-      name: 'Uwase vs Kigali Holdings',
-      type: 'Land Dispute',
-      stage: 'Drafting Submissions',
-      progress: 70,
-      nextDeadline: '2026-02-05',
-    },
-    {
-      id: '2',
-      name: 'Twagirayezu Employment Matter',
-      type: 'Employment Law',
-      stage: 'Mediation',
-      progress: 60,
-      nextDeadline: '2026-02-08',
-    },
-    {
-      id: '3',
-      name: 'Uwizeye vs City of Kigali',
-      type: 'Civil Dispute',
-      stage: 'Discovery',
-      progress: 50,
-      nextDeadline: '2026-02-10',
-    },
-  ];
+  {
+    id: '1',
+    name: 'RS/SCP/RCOM 00388/2024/TC',
+    type: 'Commercial Dispute',
+    stage: 'Pre-Trial Submissions',
+    progress: 70,
+    nextDeadline: '2026-02-25',
+  },
+  {
+    id: '2',
+    name: 'RSOC 00001/2025/HC/KIG',
+    type: 'Civil Litigation',
+    stage: 'Hearing Preparation',
+    progress: 55,
+    nextDeadline: '2026-02-28',
+  },
+];
+
 
   const upcomingEvents = [
-    {
-      id: '1',
-      title: 'Client Meeting – Uwizeye Matter',
-      date: '2026-02-01',
-      time: '2:30 PM',
-    },
-    {
-      id: '2',
-      title: 'Court Mention – Twagirayezu Case',
-      date: '2026-02-04',
-      time: '10:00 AM',
-    },
-    {
-      id: '3',
-      title: 'Strategy Session: Partner Review',
-      date: '2026-02-06',
-      time: '4:00 PM',
-    },
-  ];
+  {
+    id: '1',
+    title: 'Client Strategy Meeting – RS/SCP/RCOM 00388/2024/TC',
+    date: '2026-02-21',
+    time: '09:00 AM',
+  },
+  {
+    id: '2',
+    title: 'Court Appearance – RSOC 00001/2025/HC/KIG',
+    date: '2026-02-22',
+    time: '11:30 AM',
+  },
+  {
+    id: '3',
+    title: 'Internal Review – Case Progress Update',
+    date: '2026-02-24',
+    time: '03:00 PM',
+  },
+];
+
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {

@@ -13,13 +13,76 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
   const [filterPriority, setFilterPriority] = useState('all');
 
   const tasks = [
-    { id: '1', title: 'Draft Motion to Dismiss', case: 'Uwase Case', assignee: 'Michael Chen', status: 'In Progress', priority: 'High', dueDate: '2026-01-31', requiresApproval: true },
-    { id: '2', title: 'Client Interview - Deposition Prep', case: 'Twagirayezu Employment', assignee: 'Michael Chen', status: 'Not Started', priority: 'High', dueDate: '2026-01-30', requiresApproval: false },
-    { id: '3', title: 'Review Discovery Documents', case: 'Johnson Injury Claim', assignee: 'Michael Chen', status: 'In Progress', priority: 'Medium', dueDate: '2026-02-02', requiresApproval: false },
-    { id: '4', title: 'Research Case Precedents', case: 'Dereva Ltd', assignee: 'Lisa Martinez', status: 'Not Started', priority: 'Medium', dueDate: '2026-02-03', requiresApproval: false },
-    { id: '5', title: 'Invoice Approval - Agasaro Ltd', case: 'Corporate Advisory', assignee: 'Sarah Mitchell', status: 'Pending Approval', priority: 'Medium', dueDate: '2026-02-01', requiresApproval: true },
-    { id: '6', title: 'Settlement Agreement Review', case: 'Dereva Ltd', assignee: 'Sarah Mitchell', status: 'Pending Approval', priority: 'High', dueDate: '2026-01-30', requiresApproval: true },
-    { id: '7', title: 'Client Deposition Prep', case: 'Uwase Case', assignee: 'Sarah Mitchell', status: 'Completed', priority: 'High', dueDate: '2026-01-28', requiresApproval: false },
+    {
+      id: '1',
+      title: 'Draft Motion to Dismiss',
+      case: 'RS/SCP/RCOM 00388/2024/TC',
+      assignee: 'Gatete Colin',
+      status: 'In Progress',
+      priority: 'High',
+      dueDate: '2026-01-31',
+      requiresApproval: true,
+    },
+    {
+      id: '2',
+      title: 'Client Interview - Deposition Prep',
+      case: 'RS/SCP/RCOM 00412/2024/TC',
+      assignee: 'Mushimiyimana Janviere',
+      status: 'Not Started',
+      priority: 'High',
+      dueDate: '2026-01-30',
+      requiresApproval: false,
+    },
+    {
+      id: '3',
+      title: 'Review Discovery Documents',
+      case: 'RS/SCP/RCOM 00388/2024/TC',
+      assignee: 'Ninsima James',
+      status: 'In Progress',
+      priority: 'Medium',
+      dueDate: '2026-02-02',
+      requiresApproval: false,
+    },
+    {
+      id: '4',
+      title: 'Research Case Precedents',
+      case: 'RS/SCP/RCOM 00521/2024/TC',
+      assignee: 'Kayumba Steven',
+      status: 'Not Started',
+      priority: 'Medium',
+      dueDate: '2026-02-03',
+      requiresApproval: false,
+    },
+    {
+      id: '5',
+      title: 'Invoice Approval – Commercial Matter',
+      case: 'RS/SCP/RCOM 00602/2024/TC',
+      assignee: 'Manishimwe Cedrick',
+      status: 'Pending Approval',
+      priority: 'Medium',
+      dueDate: '2026-02-01',
+      requiresApproval: true,
+    },
+    {
+      id: '6',
+      title: 'Settlement Agreement Review',
+      case: 'RS/SCP/RCOM 00388/2024/TC',
+      assignee: 'Uwase Linda',
+      status: 'Pending Approval',
+      priority: 'High',
+      dueDate: '2026-01-30',
+      requiresApproval: true,
+    },
+    {
+      id: '7',
+      title: 'Client Deposition Prep',
+      case: 'RS/SCP/RCOM 00412/2024/TC',
+      assignee: 'Gatete Colin',
+      status: 'Completed',
+      priority: 'High',
+      dueDate: '2026-01-28',
+      requiresApproval: false,
+    },
   ];
 
   const getStatusColor = (status: string) => {
@@ -43,15 +106,12 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
   };
 
   const filteredTasks = tasks.filter(task => {
-    const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          task.case.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.case.toLowerCase().includes(searchTerm.toLowerCase());
+
     const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
     const matchesPriority = filterPriority === 'all' || task.priority === filterPriority;
-
-    // Role-based filtering
-    if (userRole === 'associate' && task.assignee !== 'Michael Chen') {
-      return false;
-    }
 
     return matchesSearch && matchesStatus && matchesPriority;
   });
@@ -102,6 +162,7 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
               <option value="Pending Approval">Pending Approval</option>
               <option value="Completed">Completed</option>
             </select>
+
             <select
               value={filterPriority}
               onChange={(e) => setFilterPriority(e.target.value)}
@@ -116,7 +177,7 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
         </div>
       </div>
 
-      {/* Kanban Board View */}
+      {/* Kanban Board */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {['Not Started', 'In Progress', 'Pending Approval', 'Completed'].map((status) => {
           const statusTasks = filteredTasks.filter(t => t.status === status);
@@ -129,6 +190,7 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
                   {statusTasks.length}
                 </span>
               </div>
+
               <div className="space-y-3">
                 {statusTasks.map((task) => (
                   <Link
@@ -140,20 +202,24 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
                       <span className={`px-2 py-0.5 text-xs rounded ${getPriorityColor(task.priority)}`}>
                         {task.priority}
                       </span>
+
                       {task.requiresApproval && (
                         <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
                           Approval
                         </span>
                       )}
                     </div>
+
                     <p className="text-sm font-medium text-gray-900 mb-2">{task.title}</p>
                     <p className="text-xs text-gray-500 mb-2">{task.case}</p>
+
                     <div className="flex items-center justify-between text-xs text-gray-500">
                       <span>{task.assignee}</span>
                       <span>Due {task.dueDate}</span>
                     </div>
                   </Link>
                 ))}
+
                 {statusTasks.length === 0 && (
                   <div className="text-center py-6 text-sm text-gray-400">No tasks</div>
                 )}
@@ -161,34 +227,6 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
             </div>
           );
         })}
-      </div>
-
-      {/* Summary Stats */}
-      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="text-2xl font-semibold text-gray-900 mb-1">
-            {filteredTasks.filter(t => t.status === 'Not Started').length}
-          </div>
-          <div className="text-sm text-gray-600">Not Started</div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="text-2xl font-semibold text-blue-600 mb-1">
-            {filteredTasks.filter(t => t.status === 'In Progress').length}
-          </div>
-          <div className="text-sm text-gray-600">In Progress</div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="text-2xl font-semibold text-yellow-600 mb-1">
-            {filteredTasks.filter(t => t.status === 'Pending Approval').length}
-          </div>
-          <div className="text-sm text-gray-600">Pending Approval</div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="text-2xl font-semibold text-green-600 mb-1">
-            {filteredTasks.filter(t => t.status === 'Completed').length}
-          </div>
-          <div className="text-sm text-gray-600">Completed</div>
-        </div>
       </div>
     </div>
   );

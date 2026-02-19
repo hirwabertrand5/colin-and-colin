@@ -15,15 +15,15 @@ export default function CaseWorkspace({ userRole }: CaseWorkspaceProps) {
   // Mock case data
   const caseData = {
   id: id,
-  name: 'Uwase Jeanne vs Kigali Holdings',
+  name: 'NTABWOBA Innocent vs INKOMBE AGRICULTURE LTD',
   caseNumber: 'RWA-2026-CIV-0147',
-  client: 'Uwase Jeanne',
+  client: 'NTABWOBA Innocent',
   type: 'Civil (Land Dispute)',
   stage: 'Discovery & Site Inspection',
   priority: 'High',
   status: 'Active',
   supervisingPartner: 'Gatete Colin',
-  assignedTo: 'Jean Karangwa',
+  assignedTo: 'Mushimiyimana Janviere',
   createdDate: '2026-01-03',
   description: 'Land dispute over boundary encroachment by Kigali Holdings in Bugesera District. Plaintiff seeks restraining order and compensation.',
   progress: 65,
@@ -47,15 +47,15 @@ export default function CaseWorkspace({ userRole }: CaseWorkspaceProps) {
 ];
 
   const tasks = [
-  { id: '1', title: 'Draft Letter of Notice', assignee: 'Jean Karangwa', status: 'In Progress', dueDate: '2026-02-02', priority: 'High' },
-  { id: '2', title: 'Review Land Registry File', assignee: 'Jean Karangwa', status: 'Not Started', dueDate: '2026-02-04', priority: 'Medium' },
+  { id: '1', title: 'Draft Letter of Notice', assignee: 'Mushimiyimana Janviere', status: 'In Progress', dueDate: '2026-02-02', priority: 'High' },
+  { id: '2', title: 'Review Land Registry File', assignee: 'Mushimiyimana Janviere', status: 'Not Started', dueDate: '2026-02-04', priority: 'Medium' },
   { id: '3', title: 'Draft Submissions', assignee: 'Gatete Colin', status: 'Completed', dueDate: '2026-01-28', priority: 'High' },
 ];
 
   const documents = [
-  { id: '1', name: 'Power of Attorney.pdf', category: 'Court Filings', uploadedBy: 'Emma Uwizeye', uploadedDate: '2026-01-03', size: '230 KB' },
-  { id: '2', name: 'Land Registry Extract.pdf', category: 'Evidence', uploadedBy: 'Jean Karangwa', uploadedDate: '2026-01-12', size: '1.4 MB' },
-  { id: '3', name: 'Engagement Letter - Uwase.pdf', category: 'Client Docs', uploadedBy: 'Gatete Colin', uploadedDate: '2026-01-05', size: '786 KB' },
+  { id: '1', name: 'Power of Attorney.pdf', category: 'Court Filings', uploadedBy: 'Mushimiyimana Janviere', uploadedDate: '2026-01-03', size: '230 KB' },
+  { id: '2', name: 'Land Registry Extract.pdf', category: 'Evidence', uploadedBy: 'Mushimiyimana Janviere', uploadedDate: '2026-01-12', size: '1.4 MB' },
+  { id: '3', name: 'Engagement Letter - Ntabwoba.pdf', category: 'Client Docs', uploadedBy: 'Gatete Colin', uploadedDate: '2026-01-05', size: '786 KB' },
 ];
 
   const events = [
@@ -76,10 +76,10 @@ export default function CaseWorkspace({ userRole }: CaseWorkspaceProps) {
 };
 
   const auditLog = [
-    { id: '1', user: 'Michael Chen', action: 'Updated task status', detail: 'Draft Motion to Dismiss: In Progress', timestamp: '2026-01-29 14:32' },
-    { id: '2', user: 'Emma Davis', action: 'Uploaded document', detail: 'Discovery Request.docx', timestamp: '2026-01-29 11:15' },
-    { id: '3', user: 'Sarah Mitchell', action: 'Approved task', detail: 'Client Deposition Prep', timestamp: '2026-01-28 16:45' },
-    { id: '4', user: 'Michael Chen', action: 'Added calendar event', detail: 'Discovery Deadline - 2026-02-05', timestamp: '2026-01-27 09:20' },
+    { id: '1', user: 'Manishimwe Cedrick', action: 'Updated task status', detail: 'Draft Motion to Dismiss: In Progress', timestamp: '2026-01-29 14:32' },
+    { id: '2', user: 'Manishimwe Cedrick', action: 'Uploaded document', detail: 'Discovery Request.docx', timestamp: '2026-01-29 11:15' },
+    { id: '3', user: 'Gatete Colin', action: 'Approved task', detail: 'Client Deposition Prep', timestamp: '2026-01-28 16:45' },
+    { id: '4', user: 'Gatete Colin', action: 'Added calendar event', detail: 'Discovery Deadline - 2026-02-05', timestamp: '2026-01-27 09:20' },
   ];
 
   const getStatusColor = (status: string) => {

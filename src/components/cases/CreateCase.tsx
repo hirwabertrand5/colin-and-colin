@@ -37,8 +37,11 @@ export default function CreateCase() {
 
   const partners = [
   'Gatete Colin',
-  'Jean Karangwa',
-  'Aline Nirere',
+  'Mushimiyimana Janviere',
+  'Ninsima James',
+  'Kayumba Steven',
+  'Manishimwe Cedrick',
+  'Uwase Linda',
 ];
 
   const workflows = [

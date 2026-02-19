@@ -18,11 +18,11 @@ export default function TaskDetail({ userRole }: TaskDetailProps) {
   const task = {
     id: id,
     title: 'Draft Motion to Dismiss',
-    case: 'Henderson vs State',
+    case: 'NTABWOBA Innocent vs INKOMBE AGRICULTURE LTD',
     caseId: '1',
     description: 'Prepare comprehensive motion to dismiss based on lack of subject matter jurisdiction. Include relevant case law citations and procedural requirements per local court rules.',
-    assignee: 'Iradukunda Alex',
-    assignedBy: 'Niyonsaba Grace',
+    assignee: 'Manishimwe Cedrick',
+    assignedBy: 'Gatete Colin',
     status: 'In Progress',
     priority: 'High',
     dueDate: '2026-01-31',
@@ -43,9 +43,9 @@ export default function TaskDetail({ userRole }: TaskDetailProps) {
       { id: '6', item: 'Submit for partner approval', completed: false },
     ],
     history: [
-      { id: '1', user: 'Iradukunda Alex', action: 'Updated status to In Progress', timestamp: '2026-01-28 09:15' },
-      { id: '2', user: 'Iradukunda Alex', action: 'Uploaded Draft Motion v1.docx', timestamp: '2026-01-29 14:30' },
-      { id: '3', user: 'Iradukunda Alex', action: 'Logged 3.5 hours', timestamp: '2026-01-29 17:00' },
+      { id: '1', user: 'Manishimwe Cedrick', action: 'Updated status to In Progress', timestamp: '2026-01-28 09:15' },
+      { id: '2', user: 'Manishimwe Cedrick', action: 'Uploaded Draft Motion v1.docx', timestamp: '2026-01-29 14:30' },
+      { id: '3', user: 'Manishimwe Cedrick', action: 'Logged 3.5 hours', timestamp: '2026-01-29 17:00' },
     ],
   };
 

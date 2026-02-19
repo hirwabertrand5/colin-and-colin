@@ -13,27 +13,9 @@ export default function Calendar({ userRole }: CalendarProps) {
   // ✅ Updated Rwandan events and case names
   const events = [
     {
-      id: '1',
-      title: 'Filing Deadline – Niyomugabo Case',
-      case: 'Niyomugabo vs RRA',
-      date: '2026-02-05',
-      time: '5:00 PM',
-      type: 'Deadline',
-      color: 'red',
-    },
-    {
-      id: '2',
-      title: 'Court Hearing – Kamanzi Appeal',
-      case: 'Kamanzi vs BNR',
-      date: '2026-02-08',
-      time: '10:00 AM',
-      type: 'Court',
-      color: 'blue',
-    },
-    {
       id: '3',
-      title: 'Client Meeting – Uwimana Contract',
-      case: 'Uwimana Contract Draft',
+      title: 'Client Meeting – NTABWOBA Contract',
+      case: 'NTABWOBA Contract Draft',
       date: '2026-01-31',
       time: '2:00 PM',
       type: 'Meeting',
@@ -41,22 +23,14 @@ export default function Calendar({ userRole }: CalendarProps) {
     },
     {
       id: '4',
-      title: 'Deposition – Mugenzi Dispute',
-      case: 'Mugenzi vs Kigali City',
+      title: 'Deposition – GASIZA Dispute',
+      case: 'GASIZA Eric vs NEW CENTURY DEVELOPMENT Ltd',
       date: '2026-02-03',
       time: '10:00 AM',
       type: 'Deposition',
       color: 'purple',
     },
-    {
-      id: '5',
-      title: 'Expert Report Filing',
-      case: 'Uwase Family Land Claim',
-      date: '2026-02-12',
-      time: 'End of Day',
-      type: 'Deadline',
-      color: 'red',
-    },
+    
     {
       id: '6',
       title: 'Partner Strategy Meeting',

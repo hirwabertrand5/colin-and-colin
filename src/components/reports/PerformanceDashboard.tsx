@@ -158,28 +158,40 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
 
         {/* Feedback Summary */}
         <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-6">
-          <h2 className="font-semibold text-gray-900 mb-4">Recent Feedback</h2>
-          <div className="space-y-4">
-            <div className="border-l-4 border-green-500 pl-4 py-2">
-              <p className="text-sm text-gray-900 mb-1">
-                "Excellent work on the Henderson motion. Thorough research and well-written."
-              </p>
-              <p className="text-xs text-gray-500">Aline Nirere • Jan 28, 2026</p>
-            </div>
-            <div className="border-l-4 border-blue-500 pl-4 py-2">
-              <p className="text-sm text-gray-900 mb-1">
-                "Great client communication skills during the Martinez deposition prep."
-              </p>
-              <p className="text-xs text-gray-500">Aline Nirere • Jan 25, 2026</p>
-            </div>
-            <div className="border-l-4 border-green-500 pl-4 py-2">
-              <p className="text-sm text-gray-900 mb-1">
-                "Consistently meeting deadlines and producing high-quality work."
-              </p>
-              <p className="text-xs text-gray-500">Quarterly Review • Jan 15, 2026</p>
-            </div>
-          </div>
-        </div>
+  <h2 className="font-semibold text-gray-900 mb-4">Recent Feedback</h2>
+  <div className="space-y-4">
+    
+    <div className="border-l-4 border-green-500 pl-4 py-2">
+      <p className="text-sm text-gray-900 mb-1">
+        "Excellent preparation for the RS/SCP/RCOM 00388/2024/TC submissions. 
+        Clear structure and strong legal grounding."
+      </p>
+      <p className="text-xs text-gray-500">
+        Ninsima James • Feb 18, 2026
+      </p>
+    </div>
+
+    <div className="border-l-4 border-blue-500 pl-4 py-2">
+      <p className="text-sm text-gray-900 mb-1">
+        "Well-coordinated documentation and timely filing for RSOC 00001/2025/HC/KIG."
+      </p>
+      <p className="text-xs text-gray-500">
+        Mushimiyimana Janviere • Feb 16, 2026
+      </p>
+    </div>
+
+    <div className="border-l-4 border-green-500 pl-4 py-2">
+      <p className="text-sm text-gray-900 mb-1">
+        "Consistent follow-up on court deadlines and internal case tracking."
+      </p>
+      <p className="text-xs text-gray-500">
+        Internal Performance Review • Feb 10, 2026
+      </p>
+    </div>
+
+  </div>
+</div>
+
       </div>
     </div>
   );

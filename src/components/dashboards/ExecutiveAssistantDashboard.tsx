@@ -45,86 +45,67 @@ export default function ExecutiveAssistantDashboard() {
   ];
 
   const todaySchedule = [
-    {
-      id: '1',
-      time: '9:00 AM',
-      title: 'Registrar Filing – Uwase Case',
-      attendees: 'Jean K., Assistant',
-      location: 'Kigali Main Registry',
-    },
-    {
-      id: '2',
-      time: '10:30 AM',
-      title: 'Partner Briefing – Monthly Summary',
-      attendees: 'G. Colin, Team Leads',
-      location: 'Boardroom A',
-    },
-    {
-      id: '3',
-      time: '2:00 PM',
-      title: 'Client Coordination – Dereva Ltd',
-      attendees: 'E. Uwizeye, Client',
-      location: 'Zoom (Link Shared)',
-    },
-    {
-      id: '4',
-      time: '4:00 PM',
-      title: 'Document Review – Contract Drafts',
-      attendees: 'A. Nirere',
-      location: 'Office 5',
-    },
-  ];
+  {
+    id: '1',
+    time: '09:00 AM',
+    title: 'Case Review – RS/SCP/RCOM 00388/2024/TC',
+    attendees: 'Ninsima James, Mushimiyimana Janviere',
+    location: 'Main Office – Meeting Room'
+  },
+  {
+    id: '2',
+    time: '11:30 AM',
+    title: 'Court Appearance – RSOC 00001/2025/HC/KIG',
+    attendees: 'Ninsima James',
+    location: 'High Court'
+  },
+  {
+    id: '3',
+    time: '03:00 PM',
+    title: 'Client File Preparation',
+    attendees: 'Mushimiyimana Janviere',
+    location: 'Records Office'
+  }
+];
+
 
   const pendingCoordination = [
-    {
-      id: '1',
-      type: 'Filing',
-      title: 'Court Notice – Uwase vs Kigali Holdings',
-      assignedTo: 'Jean Karangwa',
-      status: 'Awaiting Upload',
-      dueDate: '2026-02-01',
-    },
-    {
-      id: '2',
-      type: 'Meeting',
-      title: 'Client Intake Follow-up – Twagirayezu',
-      assignedTo: 'A. Nirere',
-      status: 'Needs Scheduling',
-      dueDate: '2026-02-02',
-    },
-    {
-      id: '3',
-      type: 'Form',
-      title: 'Budget Approval – Dereva Ltd',
-      assignedTo: 'G. Colin',
-      status: 'Pending Review',
-      dueDate: '2026-02-03',
-    },
-  ];
+  {
+    id: '1',
+    type: 'Court Filing',
+    title: 'Submit Additional Evidence – RS/SCP/RCOM 00388/2024/TC',
+    assignedTo: 'Mushimiyimana Janviere',
+    status: 'Pending',
+    dueDate: 'Feb 21, 2026'
+  },
+  {
+    id: '2',
+    type: 'Client Follow-up',
+    title: 'Prepare Witness Brief – RSOC 00001/2025/HC/KIG',
+    assignedTo: 'Ninsima James',
+    status: 'In Progress',
+    dueDate: 'Feb 22, 2026'
+  }
+];
+
 
   const recentCases = [
-    {
-      id: '1',
-      name: 'Uwase vs Kigali Holdings',
-      client: 'Uwase Jeanne',
-      createdDate: '2026-01-29',
-      status: 'Active',
-    },
-    {
-      id: '2',
-      name: 'Twagirayezu Employment Matter',
-      client: 'Twagirayezu Ltd',
-      createdDate: '2026-01-27',
-      status: 'Active',
-    },
-    {
-      id: '3',
-      name: 'Dereva Corporate Compliance',
-      client: 'Dereva Ltd',
-      createdDate: '2026-01-25',
-      status: 'Active',
-    },
-  ];
+  {
+    id: '1',
+    name: 'RS/SCP/RCOM 00388/2024/TC',
+    status: 'On Boarding',
+    client: 'NTABWOBA Innocent',
+    createdDate: 'Feb 15, 2026'
+  },
+  {
+    id: '2',
+    name: 'RSOC 00001/2025/HC/KIG',
+    status: 'Hearing',
+    client: 'GASIZA Eric',
+    createdDate: 'Feb 17, 2026'
+  }
+];
+
 
   const getStatusColor = (status: string) => {
     switch (status) {
