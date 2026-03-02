@@ -22,7 +22,7 @@ import WorkflowConfig from './components/admin/WorkflowConfig';
 import Settings from './components/admin/Settings';
 import HelpCenter from './components/help/HelpCenter';
 
-export type UserRole = 'managing_partner' | 'associate' | 'executive_assistant';
+export type UserRole = 'managing_director' | 'associate' | 'executive_assistant';
 
 export interface User {
   id: string;
@@ -83,7 +83,7 @@ function App() {
                   <Route 
                     path="/" 
                     element={
-                      user.role === 'managing_partner' ? <ManagingPartnerDashboard /> :
+                      user.role === 'managing_director' ? <ManagingPartnerDashboard /> :
                       user.role === 'associate' ? <AssociateDashboard /> :
                       <ExecutiveAssistantDashboard />
                     } 
@@ -113,7 +113,7 @@ function App() {
                   <Route path="/reports" element={<FirmReports userRole={user.role} />} />
                   
                   {/* Administration */}
-                  {user.role === 'managing_partner' && (
+                  {user.role === 'managing_director' && (
                     <>
                       <Route path="/admin/users" element={<UserManagement />} />
                       <Route path="/admin/workflows" element={<WorkflowConfig />} />

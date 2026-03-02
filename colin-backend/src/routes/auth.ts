@@ -11,7 +11,7 @@ router.post('/login', login);
 router.post(
   '/register',
   authenticate,
-  authorize(['managing_partner']),
+  authorize(['managing_director']),
   registerUser
 );
 

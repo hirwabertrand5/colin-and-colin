@@ -1,60 +1,41 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { User, UserRole } from '../../App';
+import { User } from '../../App';
 import companyLogo from '../../assets/logo-colin.png';
+import { loginApi } from '../../services/authService';
 
 interface LoginProps {
   onLogin: (user: User) => void;
 }
 
-const mockUsers = {
-  'partner@lawfirm.com': {
-    id: '1',
-    email: 'partner@lawfirm.com',
-    name: 'Gatete Colin',
-    role: 'Managing director' as UserRole,
-    password: 'password',
-  },
-  'associate@lawfirm.com': {
-    id: '2',
-    email: 'associate@lawfirm.com',
-    name: 'Manishimwe Cedrick',
-    role: 'associate' as UserRole,
-    password: 'password',
-  },
-  'assistant@lawfirm.com': {
-    id: '3',
-    email: 'assistant@lawfirm.com',
-    name: 'Mushimiyimana Janviere',
-    role: 'Executive Assistant' as UserRole,
-    password: 'password',
-  },
-};
-
 export default function Login({ onLogin }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    const user = mockUsers[email as keyof typeof mockUsers];
-    if (user && user.password === password) {
-      const { password: _, ...userWithoutPassword } = user;
-      onLogin(userWithoutPassword);
-    } else {
-      setError('Invalid email or password');
+    try {
+      const response = await loginApi(email, password);
+      // Store token and user info
+      localStorage.setItem('token', response.token);
+      localStorage.setItem('user', JSON.stringify(response.user));
+      onLogin(response.user);
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
       <div className="max-w-md w-full">
-        {/* White Card */}
         <div className="bg-white rounded-lg border border-gray-300 p-8 shadow-sm">
-          {/* Company Logo and Text inside the card */}
           <div className="text-center mb-10">
             <img
               src={companyLogo}
@@ -66,7 +47,6 @@ export default function Login({ onLogin }: LoginProps) {
             </p>
           </div>
 
-          {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -107,8 +87,9 @@ export default function Login({ onLogin }: LoginProps) {
             <button
               type="submit"
               className="w-full bg-gray-800 text-white py-2 px-4 rounded hover:bg-gray-700 transition-colors"
+              disabled={loading}
             >
-              Sign In
+              {loading ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
 

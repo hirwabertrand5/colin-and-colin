@@ -114,7 +114,7 @@ export default function ManagingPartnerDashboard() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Managing Partner Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Managing Director Dashboard</h1>
         <p className="text-gray-600">Firm performance, approvals and billing insights</p>
       </div>
 

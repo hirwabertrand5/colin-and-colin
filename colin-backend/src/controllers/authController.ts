@@ -30,11 +30,11 @@ export const login = async (req: Request, res: Response) => {
   user.lockUntil = undefined as any;
   await user.save();
 
-  const token = jwt.sign(
-    { id: user._id, role: user.role, email: user.email },
-    process.env.JWT_SECRET as string,
-    { expiresIn: '15m' }
-  );
+ const token = jwt.sign(
+  { id: user._id, name: user.name, role: user.role, email: user.email }, // <-- add name here!
+  process.env.JWT_SECRET as string,
+  { expiresIn: '15m' }
+);
 
   res.json({
     token,

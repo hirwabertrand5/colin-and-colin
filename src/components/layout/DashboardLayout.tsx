@@ -37,8 +37,8 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
     { name: 'Cases', href: '/cases', icon: Briefcase },
     { name: 'Tasks', href: '/tasks', icon: CheckSquare },
     { name: 'Calendar', href: '/calendar', icon: CalendarIcon },
-    { name: 'Billing', href: '/billing', icon: DollarSign, roles: ['managing_partner', 'executive_assistant'] },
-    { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['managing_partner'] },
+    { name: 'Billing', href: '/billing', icon: DollarSign, roles: ['managing_director', 'executive_assistant'] },
+    { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['managing_director'] },
     { name: 'Performance', href: '/performance', icon: BarChart3, roles: ['associate'] },
   ];
 
@@ -109,7 +109,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
             </div>
 
             {/* Admin Section */}
-            {user.role === 'managing_partner' && (
+            {user.role === 'managing_director' && (
               <div className="mt-8">
                 <div className="px-3 mb-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Administration

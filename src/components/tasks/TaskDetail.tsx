@@ -109,7 +109,7 @@ export default function TaskDetail({ userRole }: TaskDetailProps) {
             </p>
           </div>
           
-          {userRole === 'managing_partner' && task.requiresApproval && task.status === 'Pending Approval' && (
+          {userRole === 'managing_director' && task.requiresApproval && task.status === 'Pending Approval' && (
             <div className="flex gap-2">
               <button
                 onClick={() => handleApproval('approve')}

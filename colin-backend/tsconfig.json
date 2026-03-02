@@ -12,7 +12,9 @@
     "declaration": true,
     "declarationMap": true,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true
+    "exactOptionalPropertyTypes": true,
+    "types": ["vite/client"]
+
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]

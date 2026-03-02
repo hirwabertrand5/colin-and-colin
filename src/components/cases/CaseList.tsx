@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search, Filter, Briefcase } from 'lucide-react';
 import { UserRole } from '../../App';
+import { getAllCases, CaseData } from '../../services/caseService';
 
 interface CaseListProps {
   userRole: UserRole;
@@ -10,29 +11,27 @@ interface CaseListProps {
 export default function CaseList({ userRole }: CaseListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [cases, setCases] = useState<CaseData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const cases = [
-    {
-      id: '1',
-      courtCaseNumber: 'RS/SCP/RCOM 00388/2024/TC',
-      parties: 'NTABWOBA Innocent vs INKOMBE AGRICULTURE LTD',
-      type: 'Civil',
-      status: 'On-Boarding',
-      priority: 'Medium',
-      assignedTo: 'Mushimiyimana Janviere',
-      lastUpdated: '2026-02-19'
-    },
-    {
-      id: '2',
-      courtCaseNumber: 'RSOC 00001/2025/HC/KIG',
-      parties: 'GASIZA Eric vs NEW CENTURY DEVELOPMENT Ltd',
-      type: 'Labor',
-      status: 'Hearing',
-      priority: 'High',
-      assignedTo: 'Ninsima James',
-      lastUpdated: '2026-02-19'
+  useEffect(() => {
+    loadCases();
+    // eslint-disable-next-line
+  }, []);
+
+  const loadCases = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await getAllCases();
+      setCases(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load cases');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -51,7 +50,7 @@ export default function CaseList({ userRole }: CaseListProps) {
     switch (status) {
       case 'On Boarding':
         return 'bg-gray-100 text-gray-700';
-      case 'Pre Trial':
+      case 'Pre trial':
         return 'bg-indigo-100 text-indigo-600';
       case 'Mediation':
         return 'bg-yellow-100 text-yellow-700';
@@ -61,6 +60,8 @@ export default function CaseList({ userRole }: CaseListProps) {
         return 'bg-purple-100 text-purple-600';
       case 'Pronouncement':
         return 'bg-pink-100 text-pink-600';
+      case 'Cope of Judgement':
+        return 'bg-orange-100 text-orange-600';
       case 'Execution':
         return 'bg-green-100 text-green-600';
       default:
@@ -70,8 +71,8 @@ export default function CaseList({ userRole }: CaseListProps) {
 
   const filteredCases = cases.filter(c => {
     const matchesSearch =
-      c.parties.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.courtCaseNumber.toLowerCase().includes(searchTerm.toLowerCase());
+      c.parties?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.caseNo?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesFilter = filterStatus === 'all' || c.status === filterStatus;
 
@@ -92,7 +93,7 @@ export default function CaseList({ userRole }: CaseListProps) {
             </p>
           </div>
 
-          {(userRole === 'managing_partner' ||
+          {(userRole === 'managing_director' ||
             userRole === 'executive_assistant') && (
             <Link
               to="/cases/new"
@@ -124,11 +125,12 @@ export default function CaseList({ userRole }: CaseListProps) {
           >
             <option value="all">All Status</option>
             <option value="On Boarding">On Boarding</option>
-            <option value="Pre Trial">Pre Trial</option>
+            <option value="Pre trial">Pre trial</option>
             <option value="Mediation">Mediation</option>
             <option value="Hearing">Hearing</option>
             <option value="Appeal">Appeal</option>
             <option value="Pronouncement">Pronouncement</option>
+            <option value="Cope of Judgement">Cope of Judgement</option>
             <option value="Execution">Execution</option>
           </select>
 
@@ -138,6 +140,13 @@ export default function CaseList({ userRole }: CaseListProps) {
           </button>
         </div>
       </div>
+
+      {/* Error */}
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -149,7 +158,7 @@ export default function CaseList({ userRole }: CaseListProps) {
                   'No.',
                   'Case No.',
                   'Parties',
-                  'Type',
+                  'Case Type',
                   'Status',
                   'Priority',
                   'Assigned To',
@@ -169,56 +178,48 @@ export default function CaseList({ userRole }: CaseListProps) {
             <tbody className="divide-y divide-gray-200">
               {filteredCases.map((item, index) => (
                 <tr
-                  key={item.id}
+                  key={item._id}
                   className="hover:bg-gray-50 transition-colors"
                 >
                   <td className="px-6 py-5 text-sm text-gray-500">
                     {index + 1}
                   </td>
-
                   <td className="px-6 py-5 text-sm font-medium text-gray-900">
-                    {item.courtCaseNumber}
+                    {item.caseNo}
                   </td>
-
                   <td className="px-6 py-5 text-sm text-gray-900">
                     {item.parties}
                   </td>
-
                   <td className="px-6 py-5 text-sm text-gray-600">
-                    {item.type}
+                    {item.caseType}
                   </td>
-
                   <td className="px-6 py-5">
                     <span
                       className={`px-3 py-1 text-xs font-medium rounded-md ${getStatusColor(
-                        item.status
+                        item.status || ''
                       )}`}
                     >
                       {item.status}
                     </span>
                   </td>
-
                   <td className="px-6 py-5">
                     <span
                       className={`px-3 py-1 text-xs font-medium rounded-md ${getPriorityColor(
-                        item.priority
+                        item.priority || ''
                       )}`}
                     >
                       {item.priority}
                     </span>
                   </td>
-
                   <td className="px-6 py-5 text-sm text-gray-600">
                     {item.assignedTo}
                   </td>
-
                   <td className="px-6 py-5 text-sm text-gray-500">
-                    {item.lastUpdated}
+                    {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : ''}
                   </td>
-
                   <td className="px-6 py-5">
                     <Link
-                      to={`/cases/${item.id}`}
+                      to={`/cases/${item._id}`}
                       className="text-sm font-medium text-gray-700 hover:text-gray-900"
                     >
                       Open →
@@ -230,11 +231,15 @@ export default function CaseList({ userRole }: CaseListProps) {
           </table>
         </div>
 
-        {filteredCases.length === 0 && (
+        {loading && (
+          <div className="text-center py-12 text-gray-500">Loading cases...</div>
+        )}
+
+        {!loading && filteredCases.length === 0 && (
           <div className="text-center py-12">
             <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500">
-              No cases found matching your criteria
+              No cases found
             </p>
           </div>
         )}

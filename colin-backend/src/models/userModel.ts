@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs'; // Using bcryptjs for better compatibility
 
-export type UserRole = 'managing_partner' | 'associate' | 'executive_assistant';
+export type UserRole = 'managing_director' | 'associate' | 'executive_assistant';
 
 export interface IUser extends Document {
   email: string;
@@ -20,7 +20,18 @@ const UserSchema = new Schema<IUser>(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     name: { type: String, required: true },
-    role: { type: String, enum: ['managing_partner', 'associate', 'executive_assistant'], required: true },
+   role: {
+  type: String,
+  enum: [
+    'managing_director',
+    'lawyer',
+    'associate',
+    'assistant',
+    'executive_assistant',
+    'intern'
+  ],
+  required: true
+},
     passwordHash: { type: String, required: true },
     isActive: { type: Boolean, default: true },
     loginAttempts: { type: Number, default: 0 },
