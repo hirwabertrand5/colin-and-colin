@@ -20,18 +20,17 @@ export default function Login({ onLogin }: LoginProps) {
     setLoading(true);
 
     try {
-  const response = await loginApi(email, password);
-  
-  // Cast the user object to the User interface
-  const user = response.user as User; 
-
-  localStorage.setItem('token', response.token);
-  localStorage.setItem('user', JSON.stringify(user));
-  onLogin(user);
-} catch (err: any) {
-  // ... error handling
-}
-
+      const response = await loginApi(email, password);
+      // Store token and user info
+      localStorage.setItem('token', response.token);
+      localStorage.setItem('user', JSON.stringify(response.user));
+      onLogin(response.user);
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
@@ -103,5 +102,4 @@ export default function Login({ onLogin }: LoginProps) {
       </div>
     </div>
   );
-}
 }
