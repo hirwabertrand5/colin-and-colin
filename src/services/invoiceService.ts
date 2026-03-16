@@ -48,3 +48,35 @@ export const uploadProof = async (invoiceId: string, file: File): Promise<Invoic
   return res.json();
 };
 
+export type InvoiceWithCase = Invoice & {
+  case?: { _id: string; caseNo: string; parties: string } | null;
+};
+
+export const getRecentInvoices = async (limit = 10): Promise<InvoiceWithCase[]> => {
+  const res = await fetch(`${API_URL}/invoices/recent?limit=${limit}`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) throw new Error((await res.json()).message || 'Failed to fetch recent invoices');
+  return res.json();
+};
+
+export const listInvoices = async (params?: {
+  status?: 'Paid' | 'Pending';
+  q?: string;
+  caseId?: string;
+  from?: string;
+  to?: string;
+}): Promise<InvoiceWithCase[]> => {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.q) qs.set('q', params.q);
+  if (params?.caseId) qs.set('caseId', params.caseId);
+  if (params?.from) qs.set('from', params.from);
+  if (params?.to) qs.set('to', params.to);
+
+  const res = await fetch(`${API_URL}/invoices?${qs.toString()}`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) throw new Error((await res.json()).message || 'Failed to fetch invoices');
+  return res.json();
+};
