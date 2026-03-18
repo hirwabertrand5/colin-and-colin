@@ -12,7 +12,7 @@ import invoiceRoutes from './routes/invoice.js';
 import auditRoutes from './routes/audit';
 import calendarRoutes from './routes/calendar';
 import billingRoutes from './routes/billing';
-
+import auditFeedRoutes from './routes/auditFeed';
 
 
 const app = express();
@@ -42,7 +42,7 @@ app.use('/api', auditRoutes);
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
-
+app.use('/api', auditFeedRoutes);
 app.use('/api', calendarRoutes);
 app.use('/api', billingRoutes);
 
