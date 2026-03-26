@@ -6,15 +6,21 @@ import {
   updateCase,
   deleteCase,
 } from '../controllers/caseController.js';
-import { authenticate } from '../middleware/authMiddleware.js';
 
+import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
+/**
+ * ✅ Option 2:
+ * - MD + Exec: full CRUD
+ * - Associate: can GET only their assigned cases (controller enforces)
+ */
 router.get('/', authenticate, getAllCases);
-router.post('/', authenticate, createCase);
 router.get('/:id', authenticate, getCaseById);
-router.put('/:id', authenticate, updateCase);     
+
+router.post('/', authenticate, createCase);
+router.put('/:id', authenticate, updateCase);
 router.delete('/:id', authenticate, deleteCase);
 
 export default router;

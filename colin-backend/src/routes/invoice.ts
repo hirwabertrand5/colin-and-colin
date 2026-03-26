@@ -1,37 +1,68 @@
 import express from 'express';
-import { getInvoicesForCase, addInvoiceToCase, uploadProof } from '../controllers/invoiceController';
-import { authenticate } from '../middleware/authMiddleware';
-import { upload } from '../controllers/documentController'; 
-import { authorize } from '../middleware/authMiddleware';
+import { authenticate, authorize } from '../middleware/authMiddleware';
+import {
+  getInvoicesForCase,
+  addInvoiceToCase,
+  uploadProof,
+  uploadInvoiceFile,
+  deleteInvoice,
+} from '../controllers/invoiceController';
+import { upload } from '../controllers/documentController';
 import { getRecentInvoices, listInvoices } from '../controllers/invoiceQueryController';
+
 const router = express.Router();
 
-// Optional: quick sanity check (remove after confirmation)
-if (
-  typeof authenticate !== 'function' ||
-  typeof getInvoicesForCase !== 'function' ||
-  typeof addInvoiceToCase !== 'function' ||
-  typeof uploadProof !== 'function' ||
-  !upload ||
-  typeof (upload as any).single !== 'function'
-) {
-  throw new Error(
-    `Invoice routes misconfigured: ${JSON.stringify({
-      authenticate: typeof authenticate,
-      getInvoicesForCase: typeof getInvoicesForCase,
-      addInvoiceToCase: typeof addInvoiceToCase,
-      uploadProof: typeof uploadProof,
-      upload: typeof upload,
-      uploadSingle: typeof (upload as any)?.single,
-    })}`
-  );
-}
+const FINANCE_ROLES = ['managing_director', 'executive_assistant'];
 
+// Case-specific
 router.get('/cases/:caseId/invoices', authenticate, getInvoicesForCase);
-router.post('/cases/:caseId/invoices', authenticate, addInvoiceToCase);
-router.post('/invoices/:invoiceId/proof', authenticate, upload.single('file'), uploadProof);
-router.get( '/invoices', authenticate, authorize(['managing_director', 'executive_assistant']), listInvoices );
-router.get( '/invoices/recent', authenticate, authorize(['managing_director', 'executive_assistant']), getRecentInvoices );
-router.post('/cases/:caseId/invoices', authenticate, authorize(['managing_director','executive_assistant']), addInvoiceToCase);
-router.post('/invoices/:invoiceId/proof', authenticate, authorize(['managing_director','executive_assistant']), upload.single('file'), uploadProof);
+
+router.post(
+  '/cases/:caseId/invoices',
+  authenticate,
+  authorize(FINANCE_ROLES),
+  addInvoiceToCase
+);
+
+// Proof of payment (marks Paid)
+router.post(
+  '/invoices/:invoiceId/proof',
+  authenticate,
+  authorize(FINANCE_ROLES),
+  upload.single('file'),
+  uploadProof
+);
+
+// ✅ NEW: Upload invoice file (does NOT mark paid)
+router.post(
+  '/invoices/:invoiceId/file',
+  authenticate,
+  authorize(FINANCE_ROLES),
+  upload.single('file'),
+  uploadInvoiceFile
+);
+
+// ✅ NEW: Delete invoice
+router.delete(
+  '/invoices/:invoiceId',
+  authenticate,
+  authorize(FINANCE_ROLES),
+  deleteInvoice
+);
+
+// Firm-wide invoice queries
+router.get(
+  '/invoices',
+  authenticate,
+  authorize(FINANCE_ROLES),
+  listInvoices
+);
+
+router.get(
+  '/invoices/recent',
+  authenticate,
+  authorize(FINANCE_ROLES),
+  getRecentInvoices
+);
+
 export default router;

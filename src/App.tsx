@@ -21,6 +21,7 @@ import UserManagement from './components/admin/UserManagement';
 import WorkflowConfig from './components/admin/WorkflowConfig';
 import Settings from './components/admin/Settings';
 import HelpCenter from './components/help/HelpCenter';
+import PettyCashDashboard from './components/pettyCash/PettyCashDashboard';
 
 export type UserRole = 'managing_director' | 'associate' | 'executive_assistant';
 
@@ -36,7 +37,6 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored session
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       setUser(JSON.parse(storedUser));
@@ -44,14 +44,15 @@ function App() {
     setIsLoading(false);
   }, []);
 
-  const handleLogin = (user: User) => {
-    setUser(user);
-    localStorage.setItem('user', JSON.stringify(user));
+  const handleLogin = (u: User) => {
+    setUser(u);
+    localStorage.setItem('user', JSON.stringify(u));
   };
 
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
   };
 
   if (isLoading) {
@@ -62,66 +63,79 @@ function App() {
     );
   }
 
+  const isMD = user?.role === 'managing_director';
+  const isExec = user?.role === 'executive_assistant';
+
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Routes */}
-        <Route 
-          path="/login" 
-          element={user ? <Navigate to="/" /> : <Login onLogin={handleLogin} />} 
-        />
+        {/* Public */}
+        <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={handleLogin} />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Protected Routes */}
+        {/* Protected */}
         <Route
           path="/*"
           element={
             user ? (
               <DashboardLayout user={user} onLogout={handleLogout}>
                 <Routes>
-                  {/* Role-based Dashboard Routing */}
-                  <Route 
-                    path="/" 
+                  {/* Dashboard */}
+                  <Route
+                    path="/"
                     element={
-                      user.role === 'managing_director' ? <ManagingPartnerDashboard /> :
-                      user.role === 'associate' ? <AssociateDashboard /> :
-                      <ExecutiveAssistantDashboard />
-                    } 
+                      user.role === 'managing_director' ? (
+                        <ManagingPartnerDashboard />
+                      ) : user.role === 'associate' ? (
+                        <AssociateDashboard />
+                      ) : (
+                        <ExecutiveAssistantDashboard />
+                      )
+                    }
                   />
-                  
-                  {/* Case Management */}
+
+                  {/* ✅ Cases (Option 2: associates can view only their assigned cases; backend enforces) */}
                   <Route path="/cases" element={<CaseList userRole={user.role} />} />
-                  <Route path="/cases/new" element={<CreateCase />} />
                   <Route path="/cases/:id/*" element={<CaseWorkspace userRole={user.role} />} />
-                  
-                  {/* Task Management */}
+
+                  {/* ✅ Create case should be MD/Exec only (frontend UX gating) */}
+                  {(isMD || isExec) && <Route path="/cases/new" element={<CreateCase />} />}
+                  {/* If associate tries /cases/new, redirect */}
+                  {user.role === 'associate' && (
+                    <Route path="/cases/new" element={<Navigate to="/cases" replace />} />
+                  )}
+
+                  {/* Tasks */}
                   <Route path="/tasks" element={<TaskBoard userRole={user.role} />} />
                   <Route path="/tasks/:id" element={<TaskDetail userRole={user.role} />} />
-                  
+
                   {/* Calendar */}
                   <Route path="/calendar" element={<Calendar userRole={user.role} />} />
-                  
+
                   {/* Notifications */}
                   <Route path="/notifications" element={<NotificationCenter />} />
-                  
-                  {/* Billing & Finance */}
+
+                  {/* Billing */}
                   <Route path="/billing" element={<BillingDashboard userRole={user.role} />} />
                   <Route path="/billing/invoices" element={<InvoiceManagement userRole={user.role} />} />
-                  
-                  {/* Performance & Reporting */}
+
+                  {/* Petty Cash */}
+                  {(isMD || isExec) && <Route path="/petty-cash" element={<PettyCashDashboard />} />}
+
+                  {/* Performance */}
                   <Route path="/performance" element={<PerformanceDashboard userRole={user.role} />} />
                   <Route path="/reports" element={<FirmReports userRole={user.role} />} />
-                  
-                  {/* Administration */}
-                  {user.role === 'managing_director' && (
+
+                  {/* Admin */}
+                  {(isMD || isExec) && <Route path="/admin/users" element={<UserManagement />} />}
+                  {isMD && (
                     <>
-                      <Route path="/admin/users" element={<UserManagement />} />
                       <Route path="/admin/workflows" element={<WorkflowConfig />} />
                       <Route path="/admin/settings" element={<Settings />} />
                     </>
                   )}
-                  
-                  {/* Help & Support */}
+
+                  {/* Help */}
                   <Route path="/help" element={<HelpCenter />} />
                 </Routes>
               </DashboardLayout>

@@ -10,7 +10,7 @@ import { writeAudit } from '../services/auditService';
 // Configure Multer storage
 const storage: StorageEngine = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/'); // Make sure this folder exists
+    cb(null, 'uploads/');
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -56,7 +56,7 @@ export const addDocumentToCase = async (req: AuthRequest, res: Response) => {
     const newDoc = new Document({
       caseId: new mongoose.Types.ObjectId(caseId),
       name: req.body.name,
-      category: req.body.category,
+      // ✅ category removed
       uploadedBy: userName,
       uploadedDate: new Date().toISOString().slice(0, 10),
       size: (req.file.size / 1024 / 1024).toFixed(2) + ' MB',
@@ -73,7 +73,7 @@ export const addDocumentToCase = async (req: AuthRequest, res: Response) => {
       ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
       action: 'DOCUMENT_UPLOADED',
       message: 'Uploaded document',
-      detail: `${newDoc.category || 'Document'} • ${newDoc.name || 'Untitled'}`,
+      detail: `${newDoc.name || 'Untitled'}`,
     });
 
     res.status(201).json(newDoc);
@@ -100,7 +100,7 @@ export const deleteDocument = async (req: AuthRequest, res: Response) => {
       ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
       action: 'DOCUMENT_DELETED',
       message: 'Deleted document',
-      detail: `${deleted.category || 'Document'} • ${deleted.name || 'Untitled'}`,
+      detail: `${deleted.name || 'Untitled'}`,
     });
 
     res.json({ message: 'Document deleted.' });

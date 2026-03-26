@@ -21,16 +21,12 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Load tasks + cases (cases used to display "case number" on cards)
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       setError('');
       try {
-        const [tasksData, casesData] = await Promise.all([
-          getAllTasks(),
-          getAllCases(),
-        ]);
+        const [tasksData, casesData] = await Promise.all([getAllTasks(), getAllCases()]);
         setTasks(tasksData);
         setCases(casesData);
       } catch (err: any) {
@@ -39,11 +35,9 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
         setLoading(false);
       }
     };
-
     load();
   }, []);
 
-  // Map caseId -> caseNo (or parties)
   const caseMap = useMemo(() => {
     const map = new Map<string, CaseData>();
     cases.forEach((c) => {
@@ -52,23 +46,15 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
     return map;
   }, [cases]);
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'High':
-        return 'bg-red-100 text-red-700';
-      case 'Medium':
-        return 'bg-yellow-100 text-yellow-700';
-      case 'Low':
-        return 'bg-green-100 text-green-700';
-      default:
-        return 'bg-gray-100 text-gray-700';
-    }
+  const getPriorityPill = (priority: string) => {
+    if (priority === 'High') return 'bg-red-50 text-red-700 border border-red-100';
+    if (priority === 'Medium') return 'bg-yellow-50 text-yellow-800 border border-yellow-100';
+    if (priority === 'Low') return 'bg-green-50 text-green-700 border border-green-100';
+    return 'bg-gray-50 text-gray-700 border border-gray-100';
   };
 
-  // Board column logic:
   const getColumn = (t: TaskData): BoardColumnId => {
     if (t.requiresApproval && t.approvalStatus === 'Pending') return 'Pending Approval';
-    // otherwise use normal status
     if (t.status === 'Not Started') return 'Not Started';
     if (t.status === 'In Progress') return 'In Progress';
     return 'Completed';
@@ -76,7 +62,8 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
-      const caseLabel = caseMap.get(t.caseId)?.caseNo || caseMap.get(t.caseId)?.parties || '';
+      const relatedCase = caseMap.get(t.caseId);
+      const caseLabel = relatedCase?.caseNo || relatedCase?.parties || '';
 
       const matchesSearch =
         t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -91,11 +78,13 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
     });
   }, [tasks, searchTerm, filterStatus, filterPriority, caseMap]);
 
-  const pendingApprovalCount = useMemo(() => {
-    return tasks.filter((t) => t.requiresApproval && t.approvalStatus === 'Pending').length;
-  }, [tasks]);
-
   const columns: BoardColumnId[] = ['Not Started', 'In Progress', 'Pending Approval', 'Completed'];
+
+  const counts = useMemo(() => {
+    const c = { 'Not Started': 0, 'In Progress': 0, 'Pending Approval': 0, Completed: 0 } as Record<BoardColumnId, number>;
+    tasks.forEach((t) => c[getColumn(t)]++);
+    return c;
+  }, [tasks]);
 
   const headerSubtitle =
     userRole === 'managing_director'
@@ -106,131 +95,136 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
 
   return (
     <div>
-      {/* Page Header */}
+      {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900 mb-1">Tasks</h1>
-            <p className="text-gray-600">{headerSubtitle}</p>
-          </div>
-
-          {pendingApprovalCount > 0 && userRole === 'managing_director' && (
-            <span className="px-3 py-1 bg-red-100 text-red-700 text-sm rounded">
-              {pendingApprovalCount} Pending Approval
-            </span>
-          )}
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            {error}
-          </div>
-        )}
-
-        {/* Search and Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search tasks..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
-            />
-          </div>
-
-          <div className="flex gap-3">
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="px-4 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
-            >
-              <option value="all">All Status</option>
-              <option value="Not Started">Not Started</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Pending Approval">Pending Approval</option>
-              <option value="Completed">Completed</option>
-            </select>
-
-            <select
-              value={filterPriority}
-              onChange={(e) => setFilterPriority(e.target.value as any)}
-              className="px-4 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
-            >
-              <option value="all">All Priorities</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
-            </select>
-          </div>
-        </div>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Tasks</h1>
+        <p className="text-gray-600">{headerSubtitle}</p>
       </div>
 
-      {/* Loading */}
+      {/* Error */}
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
+
+      {/* Search + Filters (Figma-like row) */}
+      <div className="mb-6 flex flex-col lg:flex-row gap-3">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search tasks..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded bg-white"
+          />
+        </div>
+
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value as any)}
+          className="px-4 py-2 border border-gray-300 rounded bg-white"
+        >
+          <option value="all">All Status</option>
+          <option value="Not Started">Not Started</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Pending Approval">Pending Approval</option>
+          <option value="Completed">Completed</option>
+        </select>
+
+        <select
+          value={filterPriority}
+          onChange={(e) => setFilterPriority(e.target.value as any)}
+          className="px-4 py-2 border border-gray-300 rounded bg-white"
+        >
+          <option value="all">All Priorities</option>
+          <option value="High">High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
+        </select>
+      </div>
+
       {loading ? (
         <div className="text-center py-12 text-gray-500">Loading tasks...</div>
       ) : (
-        /* Kanban Board */
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          {columns.map((col) => {
-            const colTasks = filteredTasks.filter((t) => getColumn(t) === col);
+        <>
+          {/* Board */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            {columns.map((col) => {
+              const colTasks = filteredTasks.filter((t) => getColumn(t) === col);
 
-            return (
-              <div key={col} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900 text-sm">{col}</h3>
-                  <span className="px-2 py-1 bg-white border border-gray-300 text-gray-700 text-xs rounded">
-                    {colTasks.length}
-                  </span>
+              return (
+                <div key={col} className="bg-white border border-gray-200 rounded-lg">
+                  <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900">{col}</h3>
+                    <span className="px-2 py-1 text-xs rounded border border-gray-200 bg-gray-50 text-gray-700">
+                      {colTasks.length}
+                    </span>
+                  </div>
+
+                  <div className="p-4 space-y-3 min-h-[220px]">
+                    {colTasks.length === 0 ? (
+                      <div className="text-sm text-gray-400 text-center py-10">No tasks</div>
+                    ) : (
+                      colTasks.map((task) => {
+                        const relatedCase = caseMap.get(task.caseId);
+                        const caseLabel = relatedCase?.caseNo || relatedCase?.parties || '—';
+
+                        const showApproval = task.requiresApproval && task.approvalStatus === 'Pending';
+                        const showRejected = task.requiresApproval && task.approvalStatus === 'Rejected';
+
+                        return (
+                          <Link
+                            key={task._id}
+                            to={`/tasks/${task._id}`}
+                            className="block border border-gray-200 rounded-lg p-4 bg-white hover:shadow-sm transition"
+                          >
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              <span className={`px-2 py-0.5 text-xs rounded ${getPriorityPill(task.priority)}`}>
+                                {task.priority}
+                              </span>
+
+                              {showApproval && (
+                                <span className="px-2 py-0.5 text-xs rounded bg-purple-50 text-purple-700 border border-purple-100">
+                                  Approval
+                                </span>
+                              )}
+
+                              {showRejected && (
+                                <span className="px-2 py-0.5 text-xs rounded bg-red-50 text-red-700 border border-red-100">
+                                  Rejected
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-sm font-semibold text-gray-900 mb-2">{task.title}</div>
+
+                            <div className="text-xs text-gray-500 mb-2 truncate">{caseLabel}</div>
+
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span className="truncate">{task.assignee}</span>
+                              <span className="shrink-0">Due {task.dueDate}</span>
+                            </div>
+                          </Link>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
+              );
+            })}
+          </div>
 
-                <div className="space-y-3">
-                  {colTasks.map((task) => {
-                    const relatedCase = caseMap.get(task.caseId);
-                    const caseLabel = relatedCase?.caseNo || relatedCase?.parties || '—';
-
-                    const showApprovalPill =
-                      task.requiresApproval && task.approvalStatus === 'Pending';
-
-                    return (
-                      <Link
-                        key={task._id}
-                        to={`/tasks/${task._id}`}
-                        className="block bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex items-start gap-2 mb-2">
-                          <span className={`px-2 py-0.5 text-xs rounded ${getPriorityColor(task.priority)}`}>
-                            {task.priority}
-                          </span>
-
-                          {showApprovalPill && (
-                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
-                              Approval
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="text-sm font-medium text-gray-900 mb-2">{task.title}</p>
-                        <p className="text-xs text-gray-500 mb-2">{caseLabel}</p>
-
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                          <span>{task.assignee}</span>
-                          <span>Due {task.dueDate}</span>
-                        </div>
-                      </Link>
-                    );
-                  })}
-
-                  {colTasks.length === 0 && (
-                    <div className="text-center py-6 text-sm text-gray-400">No tasks</div>
-                  )}
-                </div>
+          {/* Summary Counters */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+            {columns.map((c) => (
+              <div key={c} className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-2xl font-semibold text-gray-900">{counts[c]}</div>
+                <div className="text-sm text-gray-600">{c}</div>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

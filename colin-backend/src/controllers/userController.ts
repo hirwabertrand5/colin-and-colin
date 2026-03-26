@@ -11,23 +11,47 @@ export const getAllUsers = async (req: Request, res: Response) => {
   }
 };
 
+// ✅ NEW: Get active staff users for assignment dropdown
+export const getStaffUsers = async (req: Request, res: Response) => {
+  try {
+    const staff = await User.find(
+      {
+        isActive: true,
+        role: {
+          $in: [
+            'managing_director',
+            'lawyer',
+            'associate',
+            'assistant',
+            'executive_assistant',
+            'intern',
+          ],
+        },
+      },
+      'name email role isActive'
+    ).sort({ name: 1 });
+
+    res.json(staff);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch staff users.' });
+  }
+};
+
 // Add new user
 export const addUser = async (req: Request, res: Response) => {
   try {
     const { name, email, role, password } = req.body;
 
-    // Check if user exists
     const userExists = await User.findOne({ email });
     if (userExists) {
       return res.status(400).json({ message: 'User already exists.' });
     }
 
-    // Create new user
     const user = new User({
       name,
       email,
       role,
-      passwordHash: password, // Will be hashed by pre-save hook
+      passwordHash: password,
       isActive: true,
       loginAttempts: 0,
     });
@@ -57,7 +81,7 @@ export const resetUserPassword = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    user.passwordHash = newPassword; // Will be hashed by pre-save hook
+    user.passwordHash = newPassword;
     await user.save();
 
     res.json({ message: 'Password reset successfully.' });
@@ -70,11 +94,7 @@ export const resetUserPassword = async (req: Request, res: Response) => {
 export const setUserActiveStatus = async (req: Request, res: Response) => {
   try {
     const { userId, isActive } = req.body;
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { isActive },
-      { new: true }
-    );
+    const user = await User.findByIdAndUpdate(userId, { isActive }, { new: true });
 
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
@@ -89,23 +109,20 @@ export const setUserActiveStatus = async (req: Request, res: Response) => {
   }
 };
 
-//update user 
+// Update user
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { name, email, role } = req.body;
-    const user = await User.findByIdAndUpdate(
-      id,
-      { name, email, role },
-      { new: true }
-    );
+    const user = await User.findByIdAndUpdate(id, { name, email, role }, { new: true });
     if (!user) return res.status(404).json({ message: 'User not found.' });
     res.json(user);
   } catch (error) {
     res.status(500).json({ message: 'Failed to update user.' });
   }
 };
-// Add at the end of your file
+
+// Delete user
 export const deleteUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

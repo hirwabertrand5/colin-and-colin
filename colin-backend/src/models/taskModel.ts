@@ -1,9 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type TaskApprovalStatus = 'Not Required' | 'Pending' | 'Approved' | 'Rejected';
-
-// You can later align these to the client's exact workflow:
-// Assigned -> In Progress -> Submitted for Review -> Approved/Returned
+export type TaskApprovalStatus = 'Not Required' | 'Draft' | 'Pending' | 'Approved' | 'Rejected';
 export type TaskStatus = 'Not Started' | 'In Progress' | 'Completed';
 
 export interface ITaskChecklistItem {
@@ -19,26 +16,26 @@ export interface ITask extends Document {
   priority: 'High' | 'Medium' | 'Low';
   status: TaskStatus;
 
-  assignee: string; // MVP: name string (later userId)
-  dueDate: string;  // YYYY-MM-DD
+  assignee: string;
+  dueDate: string; // YYYY-MM-DD
   description?: string;
 
-  // Approval workflow
   requiresApproval: boolean;
   approvalStatus: TaskApprovalStatus;
   submittedAt?: Date;
-  approvedAt?: Date;
-  approvedBy?: string; // name snapshot for MVP
+
+  approvedAt?: Date;   // decision time for Approved
+  rejectedAt?: Date;   // decision time for Rejected
+  completedAt?: Date;  // actual completion time (important for on-time KPI)
+
+  approvedBy?: string;
   approvalComment?: string;
 
-  // Time tracking
   estimatedHours?: number;
 
-  // Checklist
   checklist: ITaskChecklistItem[];
 
-  // Audit info
-  assignedBy?: string; // name snapshot for MVP
+  assignedBy?: string;
 
   createdAt: Date;
   updatedAt: Date;
@@ -72,29 +69,30 @@ const TaskSchema = new Schema<ITask>(
     },
 
     assignee: { type: String, required: true, trim: true },
-    dueDate: { type: String, required: true }, // keep string for now
+    dueDate: { type: String, required: true },
     description: { type: String },
 
-    // Approval workflow
     requiresApproval: { type: Boolean, default: false },
     approvalStatus: {
       type: String,
-      enum: ['Not Required', 'Pending', 'Approved', 'Rejected'],
+      enum: ['Not Required', 'Draft', 'Pending', 'Approved', 'Rejected'],
       default: 'Not Required',
       index: true,
     },
+
     submittedAt: { type: Date },
+
     approvedAt: { type: Date },
+    rejectedAt: { type: Date },
+    completedAt: { type: Date },
+
     approvedBy: { type: String },
     approvalComment: { type: String },
 
-    // Time tracking
     estimatedHours: { type: Number, min: 0 },
 
-    // Checklist
     checklist: { type: [TaskChecklistItemSchema], default: [] },
 
-    // Assigned by
     assignedBy: { type: String },
   },
   { timestamps: true }

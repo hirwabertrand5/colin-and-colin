@@ -14,11 +14,11 @@ import {
   X,
   LogOut,
   Users,
-  Workflow
+  Workflow,
+  Wallet,
 } from 'lucide-react';
 import { User } from '../../App';
 
-// ✅ Replace mock icon with actual logo
 import companyLogo from '../../assets/logo-colin.png';
 
 interface DashboardLayoutProps {
@@ -27,25 +27,43 @@ interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
+type NavItem = {
+  name: string;
+  href: string;
+  icon: React.ComponentType<any>;
+  roles?: string[];
+};
+
 export default function DashboardLayout({ user, onLogout, children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationCount] = useState(5);
   const location = useLocation();
 
-  const navigation = [
+  // ✅ Option 2: Associates can access Cases (but backend filters to assigned cases)
+  const navigation: NavItem[] = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Cases', href: '/cases', icon: Briefcase },
+
+    // ✅ visible for MD + Exec + Associate
+    {
+      name: 'Cases',
+      href: '/cases',
+      icon: Briefcase,
+      roles: ['managing_director', 'executive_assistant', 'associate'],
+    },
+
     { name: 'Tasks', href: '/tasks', icon: CheckSquare },
     { name: 'Calendar', href: '/calendar', icon: CalendarIcon },
+
     { name: 'Billing', href: '/billing', icon: DollarSign, roles: ['managing_director', 'executive_assistant'] },
     { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['managing_director'] },
     { name: 'Performance', href: '/performance', icon: BarChart3, roles: ['associate'] },
   ];
 
-  const adminNavigation = [
-    { name: 'Users', href: '/admin/users', icon: Users },
-    { name: 'Workflows', href: '/admin/workflows', icon: Workflow },
-    { name: 'Settings', href: '/admin/settings', icon: Settings },
+  const adminNavigation: NavItem[] = [
+    { name: 'Users', href: '/admin/users', icon: Users, roles: ['managing_director', 'executive_assistant'] },
+    { name: 'Petty Cash', href: '/petty-cash', icon: Wallet, roles: ['managing_director', 'executive_assistant'] },
+    { name: 'Workflows', href: '/admin/workflows', icon: Workflow, roles: ['managing_director'] },
+    { name: 'Settings', href: '/admin/settings', icon: Settings, roles: ['managing_director'] },
   ];
 
   const isActive = (href: string) => {
@@ -53,9 +71,9 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
     return location.pathname.startsWith(href);
   };
 
-  const hasAccess = (item: { roles?: string[] }) => {
-    return !item.roles || item.roles.includes(user.role);
-  };
+  const hasAccess = (item: { roles?: string[] }) => !item.roles || item.roles.includes(user.role);
+
+  const adminItems = adminNavigation.filter(hasAccess);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -68,13 +86,15 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
       )}
 
       {/* Sidebar */}
-      <div className={`
-        fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out z-50
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        lg:translate-x-0
-      `}>
+      <div
+        className={`
+          fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out z-50
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:translate-x-0
+        `}
+      >
         <div className="flex flex-col h-full">
-          {/* 👇 Enhanced Logo Section */}
+          {/* Logo */}
           <div className="flex items-center justify-center h-24 px-6 border-b border-gray-200">
             <img
               src={companyLogo}
@@ -108,14 +128,14 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
               })}
             </div>
 
-            {/* Admin Section */}
-            {user.role === 'managing_director' && (
+            {/* Admin */}
+            {adminItems.length > 0 && (
               <div className="mt-8">
                 <div className="px-3 mb-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Administration
                 </div>
                 <div className="space-y-1">
-                  {adminNavigation.map((item) => {
+                  {adminItems.map((item) => {
                     const Icon = item.icon;
                     return (
                       <Link
@@ -162,7 +182,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
           <div className="p-4 border-t border-gray-200">
             <div className="flex items-center mb-3">
               <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 font-medium">
-                {user.name.split(' ').map(n => n[0]).join('')}
+                {user.name.split(' ').map((n) => n[0]).join('')}
               </div>
               <div className="ml-3 flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{user.name}</p>
@@ -171,6 +191,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
                 </p>
               </div>
             </div>
+
             <button
               onClick={onLogout}
               className="w-full flex items-center px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded transition-colors"
@@ -196,10 +217,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
           <div className="hidden lg:block" />
 
           <div className="flex items-center space-x-4">
-            <Link
-              to="/notifications"
-              className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors"
-            >
+            <Link to="/notifications" className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors">
               <Bell className="w-6 h-6" />
               {notificationCount > 0 && (
                 <span className="absolute top-0 right-0 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
@@ -207,16 +225,14 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
                 </span>
               )}
             </Link>
+
             <div className="lg:hidden w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 font-medium">
-              {user.name.split(' ').map(n => n[0]).join('')}
+              {user.name.split(' ').map((n) => n[0]).join('')}
             </div>
           </div>
         </header>
 
-        {/* PageRender */}
-        <main className="p-4 lg:p-6">
-          {children}
-        </main>
+        <main className="p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );

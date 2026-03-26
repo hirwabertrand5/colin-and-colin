@@ -9,9 +9,10 @@ import {
   TrendingUp,
 } from 'lucide-react';
 
-import { getAllTasks, getTimeLogsForTask, TaskData } from '../../services/taskService';
+import { getAllTasks, TaskData } from '../../services/taskService';
 import { getCaseById, CaseData } from '../../services/caseService';
 import { getFirmEvents, FirmCalendarEvent } from '../../services/eventService';
+import { getMyTimeLogSummary } from '../../services/timeLogService';
 
 type StatCard = {
   label: string;
@@ -76,7 +77,6 @@ const priorityChip = (priority: string) => {
 };
 
 export default function AssociateDashboard() {
-  // Logged-in user (for “customized” reassurance + future use)
   const me = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem('user') || 'null') as
@@ -90,7 +90,6 @@ export default function AssociateDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Core data (already filtered server-side to this user for /api/tasks and /api/calendar/events)
   const [tasks, setTasks] = useState<TaskData[]>([]);
   const [casesById, setCasesById] = useState<Record<string, CaseData>>({});
   const [events, setEvents] = useState<FirmCalendarEvent[]>([]);
@@ -102,7 +101,6 @@ export default function AssociateDashboard() {
   const next30Days = useMemo(() => addDaysISO(today, 30), [today]);
   const monthLabel = useMemo(() => formatMonthLabel(), []);
 
-  // Derived: cases list based on tasks.caseId
   const caseIds = useMemo(() => {
     const ids = new Set<string>();
     tasks.forEach((t) => {
@@ -111,7 +109,6 @@ export default function AssociateDashboard() {
     return Array.from(ids);
   }, [tasks]);
 
-  // Derived: task groupings
   const tasksDueToday = useMemo(
     () => tasks.filter((t) => t.dueDate === today && t.status !== 'Completed'),
     [tasks, today]
@@ -123,8 +120,6 @@ export default function AssociateDashboard() {
   );
 
   const completedThisWeek = useMemo(() => {
-    // Accurate version requires completedAt in DB.
-    // MVP approximation: updatedAt when status is Completed.
     return tasks.filter((t) => {
       if (t.status !== 'Completed') return false;
       const u = (t.updatedAt || '').slice(0, 10);
@@ -132,7 +127,6 @@ export default function AssociateDashboard() {
     });
   }, [tasks, weekStart]);
 
-  // My Tasks panel: next due tasks
   const myTasksPanel = useMemo(() => {
     const prioRank: Record<string, number> = { High: 1, Medium: 2, Low: 3 };
     return [...tasks]
@@ -144,7 +138,6 @@ export default function AssociateDashboard() {
       .slice(0, 6);
   }, [tasks]);
 
-  // My Cases list: enriched with next deadline + progress
   const myCasesPanel = useMemo(() => {
     const nextDeadlineByCase: Record<string, string> = {};
     const countsByCase: Record<string, { total: number; done: number }> = {};
@@ -179,7 +172,14 @@ export default function AssociateDashboard() {
           nextDeadline: nextDeadlineByCase[cid] || '—',
         };
       })
-      .sort((a, b) => String(a.nextDeadline).localeCompare(String(b.nextDeadline)));
+      .sort((a, b) => {
+        const aHas = a.nextDeadline && a.nextDeadline !== '—';
+        const bHas = b.nextDeadline && b.nextDeadline !== '—';
+        if (aHas && !bHas) return -1;
+        if (!aHas && bHas) return 1;
+        if (!aHas && !bHas) return 0;
+        return String(a.nextDeadline).localeCompare(String(b.nextDeadline));
+      });
 
     return list;
   }, [caseIds, casesById, tasks]);
@@ -227,12 +227,12 @@ export default function AssociateDashboard() {
         setLoading(true);
         setError('');
 
-        // 1) Tasks (already customized by backend for associates)
+        // 1) Tasks
         const allTasks = await getAllTasks();
         if (!mounted) return;
         setTasks(allTasks);
 
-        // 2) Fetch only referenced cases (by caseId in tasks)
+        // 2) Fetch referenced cases
         const uniqueCaseIds = Array.from(
           new Set(allTasks.map((t) => String(t.caseId)).filter((x) => x && x !== 'undefined'))
         );
@@ -254,28 +254,20 @@ export default function AssociateDashboard() {
         });
         setCasesById(map);
 
-        // 3) Upcoming calendar events (next 30 days)
+        // 3) Upcoming events (next 30 days)
         const ev = await getFirmEvents({ from: today, to: next30Days, type: 'all' });
         if (!mounted) return;
         setEvents(ev);
 
-        // 4) Billable Hours (MTD) from time logs
-        const mtdTasks = allTasks.filter((t) => t.dueDate >= monthStart && t.dueDate <= today);
-
-        const hoursList = await Promise.all(
-          mtdTasks.map(async (t) => {
-            try {
-              const resp = await getTimeLogsForTask(String(t._id));
-              return safeNum(resp.totalHours);
-            } catch {
-              return 0;
-            }
-          })
-        );
-
-        if (!mounted) return;
-        const totalHours = hoursList.reduce((s, x) => s + x, 0);
-        setBillableHoursMTD(Math.round(totalHours * 10) / 10);
+        // 4) Billable Hours (MTD) aggregated (accurate + fast)
+        try {
+          const resp = await getMyTimeLogSummary(monthStart, today);
+          if (!mounted) return;
+          setBillableHoursMTD(safeNum(resp.totalHours));
+        } catch {
+          if (!mounted) return;
+          setBillableHoursMTD(0);
+        }
       } catch (e: any) {
         if (!mounted) return;
         setError(e?.message || 'Failed to load associate dashboard.');
@@ -294,9 +286,7 @@ export default function AssociateDashboard() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">
-          Associate Dashboard
-        </h1>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Associate Dashboard</h1>
         <p className="text-gray-600">
           {me?.name ? `Welcome, ${me.name}. ` : ''}
           View your assigned cases, tasks &amp; performance.
@@ -317,18 +307,14 @@ export default function AssociateDashboard() {
             <div key={stat.label} className="bg-white border border-gray-200 rounded-lg p-5">
               <div className="flex items-start justify-between mb-3">
                 <div
-                  className={`w-10 h-10 ${
-                    stat.color === 'red' ? 'bg-red-100' : 'bg-gray-100'
-                  } rounded-lg flex items-center justify-center`}
+                  className={`w-10 h-10 ${stat.color === 'red' ? 'bg-red-100' : 'bg-gray-100'
+                    } rounded-lg flex items-center justify-center`}
                 >
                   <Icon className={`w-5 h-5 ${stat.color === 'red' ? 'text-red-600' : 'text-gray-700'}`} />
                 </div>
               </div>
 
-              <div className="text-2xl font-semibold text-gray-900 mb-1">
-                {loading ? '…' : stat.value}
-              </div>
-
+              <div className="text-2xl font-semibold text-gray-900 mb-1">{loading ? '…' : stat.value}</div>
               <div className="text-sm text-gray-600">{stat.label}</div>
 
               {!loading && stat.label === 'Tasks Due Today' && overdueTasks.length > 0 && (
@@ -339,6 +325,7 @@ export default function AssociateDashboard() {
         })}
       </div>
 
+      {/* Rest of your UI unchanged below */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Tasks */}
         <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg">

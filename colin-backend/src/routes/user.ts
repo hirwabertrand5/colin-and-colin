@@ -1,46 +1,34 @@
 import express from 'express';
 import {
   getAllUsers,
+  getStaffUsers,
   addUser,
   resetUserPassword,
   setUserActiveStatus,
   updateUser,
+  deleteUser,
 } from '../controllers/userController.js';
 import { authenticate, authorize } from '../middleware/authMiddleware.js';
-import { deleteUser } from '../controllers/userController.js';
 
 const router = express.Router();
 
-// All routes require authentication and managing_partner role
+// ✅ Full access for Managing Director + Executive Assistant (as you requested)
+const USER_ADMIN_ROLES = ['managing_director', 'executive_assistant'];
+
+// ✅ Staff list for case assignment dropdown
+// allow admin + associate to read staff list
 router.get(
-  '/',
+  '/staff',
   authenticate,
-  authorize(['managing_director']),
-  getAllUsers
+  authorize(['managing_director', 'executive_assistant', 'associate']),
+  getStaffUsers
 );
 
-router.post(
-  '/',
-  authenticate,
-  authorize(['managing_director']),
-  addUser
-);
+router.get('/', authenticate, authorize(USER_ADMIN_ROLES), getAllUsers);
+router.post('/', authenticate, authorize(USER_ADMIN_ROLES), addUser);
+router.post('/reset-password', authenticate, authorize(USER_ADMIN_ROLES), resetUserPassword);
+router.post('/set-active', authenticate, authorize(USER_ADMIN_ROLES), setUserActiveStatus);
+router.put('/:id', authenticate, authorize(USER_ADMIN_ROLES), updateUser);
+router.delete('/:id', authenticate, authorize(USER_ADMIN_ROLES), deleteUser);
 
-router.post(
-  '/reset-password',
-  authenticate,
-  authorize(['managing_director']),
-  resetUserPassword
-);
-
-router.post(
-  '/set-active',
-  authenticate,
-  authorize(['managing_director']),
-  setUserActiveStatus
-);
-
-router.put('/:id', authenticate, authorize(['managing_director']), updateUser);
 export default router;
-
-router.delete('/:id', authenticate, authorize(['managing_director']), deleteUser);

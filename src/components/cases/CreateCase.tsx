@@ -1,14 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { createCase, CaseData } from '../../services/caseService';
+
+type StaffUser = {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
+const API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5000/api';
+const getToken = () => localStorage.getItem('token');
 
 export default function CreateCase() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [loadingStaff, setLoadingStaff] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
 
   const [formData, setFormData] = useState<CaseData>({
     caseNo: '',
@@ -29,17 +42,10 @@ export default function CreateCase() {
     'Labor Cases',
   ];
 
-  const partners = [
-    'Gatete Colin',
-    'Mushimiyimana Janviere',
-    'Ninsima James',
-    'Kayumba Steven',
-    'Manishimwe Cedrick',
-    'Uwase Linda',
-  ];
-
+  // ✅ Added "Under Submission" after "On Boarding"
   const statuses = [
     'On Boarding',
+    'Under Submission',
     'Pre trial',
     'Mediation',
     'Hearing',
@@ -48,6 +54,41 @@ export default function CreateCase() {
     'Cope of Judgement',
     'Execution',
   ];
+
+  useEffect(() => {
+    const fetchStaff = async () => {
+      setLoadingStaff(true);
+      try {
+        const res = await fetch(`${API_URL}/users/staff`, {
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+          },
+        });
+
+        // basic auth handling
+        if (res.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+          return;
+        }
+
+        if (!res.ok) {
+  const text = await res.text();
+  throw new Error(`Failed to fetch staff users (${res.status}): ${text}`);
+}
+
+        const data: StaffUser[] = await res.json();
+        setStaffUsers(data);
+      } catch (e: any) {
+        setError(e.message || 'Failed to load staff');
+      } finally {
+        setLoadingStaff(false);
+      }
+    };
+
+    fetchStaff();
+  }, []);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData({ ...formData, [field]: value });
@@ -107,12 +148,14 @@ export default function CreateCase() {
           {[1, 2, 3].map((stepNumber, index) => (
             <div key={stepNumber} className="flex items-center flex-1">
               <div className="flex items-center">
-                <div className={`
-                  w-10 h-10 rounded-full flex items-center justify-center font-medium
-                  ${step > stepNumber ? 'bg-gray-800 text-white' : 
-                    step === stepNumber ? 'bg-gray-800 text-white' : 
-                    'bg-gray-200 text-gray-500'}
-                `}>
+                <div
+                  className={`
+                    w-10 h-10 rounded-full flex items-center justify-center font-medium
+                    ${step > stepNumber ? 'bg-gray-800 text-white' :
+                      step === stepNumber ? 'bg-gray-800 text-white' :
+                      'bg-gray-200 text-gray-500'}
+                  `}
+                >
                   {step > stepNumber ? <Check className="w-5 h-5" /> : stepNumber}
                 </div>
                 <div className="ml-3">
@@ -160,6 +203,7 @@ export default function CreateCase() {
                 className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Parties *
@@ -172,6 +216,7 @@ export default function CreateCase() {
                 className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
               />
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -188,6 +233,7 @@ export default function CreateCase() {
                   ))}
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Priority *
@@ -203,21 +249,36 @@ export default function CreateCase() {
                 </select>
               </div>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Assigned To *
               </label>
+
               <select
                 value={formData.assignedTo}
                 onChange={(e) => handleInputChange('assignedTo', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                disabled={loadingStaff}
+                className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-60"
               >
-                <option value="">Select staff</option>
-                {partners.map(partner => (
-                  <option key={partner} value={partner}>{partner}</option>
+                <option value="">
+                  {loadingStaff ? 'Loading staff...' : 'Select staff'}
+                </option>
+
+                {staffUsers.map((u) => (
+                  <option key={u._id} value={u.name}>
+                    {u.name} ({ROLE_DISPLAY_MAP[u.role] || u.role})
+                  </option>
                 ))}
               </select>
+
+              {!loadingStaff && staffUsers.length === 0 && (
+                <p className="text-xs text-gray-500 mt-2">
+                  No active staff users found. Add users first in Administration → Users.
+                </p>
+              )}
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Case Description
@@ -250,9 +311,10 @@ export default function CreateCase() {
                 ))}
               </select>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">
-                Workflow Template
+                Case Type
               </label>
               <input
                 type="text"
@@ -261,7 +323,8 @@ export default function CreateCase() {
                 placeholder="e.g., land_dispute"
                 className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
               />
-            </div>
+            </div>~
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -275,6 +338,7 @@ export default function CreateCase() {
                   className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Budget Estimate
@@ -368,7 +432,9 @@ export default function CreateCase() {
               disabled={loading}
               className="inline-flex items-center px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700 transition-colors"
             >
-              {loading ? 'Creating...' : (
+              {loading ? (
+                'Creating...'
+              ) : (
                 <>
                   <Check className="w-4 h-4 mr-2" />
                   Create Case
@@ -381,3 +447,13 @@ export default function CreateCase() {
     </div>
   );
 }
+
+// optional display map for roles
+const ROLE_DISPLAY_MAP: Record<string, string> = {
+  managing_director: 'Managing Director',
+  lawyer: 'Lawyer',
+  associate: 'Associate',
+  assistant: 'Assistant',
+  executive_assistant: 'Executive Assistant',
+  intern: 'Intern',
+};

@@ -1,16 +1,15 @@
-import { useEffect, useState, useRef } from 'react';
-import { Search, Plus, Edit, UserPlus, Power, PowerOff, Key } from 'lucide-react';
+import { useEffect, useState, useRef, useMemo } from 'react';
+import { Search, Plus, Edit, UserPlus, Power, PowerOff, Key, Trash2 } from 'lucide-react';
 import {
   getAllUsers,
   addUser,
   setUserActiveStatus,
   editUser,
   resetUserPassword,
+  deleteUser as deleteUserApi,
   User,
   NewUserData,
 } from '../../services/userService';
-import { Trash2 } from 'lucide-react';
-import { deleteUser as deleteUserApi } from '../../services/userService';
 
 const ROLE_OPTIONS = [
   { value: 'managing_director', label: 'Managing Director' },
@@ -30,6 +29,14 @@ const ROLE_DISPLAY_MAP: Record<string, string> = {
   intern: 'Intern',
 };
 
+type AppStoredUser = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+};
+
 export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,6 +47,7 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
   const [form, setForm] = useState<NewUserData>({
     name: '',
     email: '',
@@ -51,6 +59,21 @@ export default function UserManagement() {
 
   // Inactivity timer
   const timer = useRef<NodeJS.Timeout | null>(null);
+
+  // Determine current role (no prop passed, so read from localStorage)
+  const currentRole = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return undefined;
+      const parsed = JSON.parse(raw) as AppStoredUser;
+      return parsed.role;
+    } catch {
+      return undefined;
+    }
+  }, []);
+
+  // ✅ Now Executive Assistant has full access like Managing Director
+  const canManageUsers = currentRole === 'managing_director' || currentRole === 'executive_assistant';
 
   // Fetch users on mount
   useEffect(() => {
@@ -93,6 +116,8 @@ export default function UserManagement() {
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageUsers) return;
+
     setError('');
     setSuccess('');
     try {
@@ -108,12 +133,14 @@ export default function UserManagement() {
 
   const handleEditUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageUsers) return;
     if (!selectedUser) return;
+
     setError('');
     setSuccess('');
     try {
-      const updated = await editUser(selectedUser._id, editForm);
-      setUsers(users.map(u => u._id === selectedUser._id ? { ...u, ...editForm } : u));
+      await editUser(selectedUser._id, editForm);
+      setUsers(users.map(u => (u._id === selectedUser._id ? { ...u, ...editForm } as any : u)));
       setSuccess('User updated successfully!');
       setShowEditModal(false);
     } catch (err: any) {
@@ -121,9 +148,11 @@ export default function UserManagement() {
     }
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
+  const handleResetUserPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageUsers) return;
     if (!selectedUser) return;
+
     setError('');
     setSuccess('');
     try {
@@ -137,10 +166,27 @@ export default function UserManagement() {
   };
 
   const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
+    if (!canManageUsers) return;
+
     try {
       await setUserActiveStatus(userId, !currentStatus);
-      setUsers(users.map(u => u._id === userId ? { ...u, isActive: !currentStatus } : u));
+      setUsers(users.map(u => (u._id === userId ? { ...u, isActive: !currentStatus } : u)));
       setSuccess(`User ${!currentStatus ? 'activated' : 'deactivated'} successfully!`);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!canManageUsers) return;
+
+    if (!window.confirm('Are you sure you want to delete this user?')) return;
+    setError('');
+    setSuccess('');
+    try {
+      await deleteUserApi(userId);
+      setUsers(users.filter(u => u._id !== userId));
+      setSuccess('User deleted successfully!');
     } catch (err: any) {
       setError(err.message);
     }
@@ -158,25 +204,12 @@ export default function UserManagement() {
     }
   };
 
-  const handleDeleteUser = async (userId: string) => {
-  if (!window.confirm('Are you sure you want to delete this user?')) return;
-  setError('');
-  setSuccess('');
-  try {
-    await deleteUserApi(userId);
-    setUsers(users.filter(u => u._id !== userId));
-    setSuccess('User deleted successfully!');
-  } catch (err: any) {
-    setError(err.message);
-  }
-};
-
   const getStatusColor = (isActive: boolean) =>
     isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600';
 
-  const filteredUsers = users.filter(user =>
-    user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredUsers = users.filter(u =>
+    u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    u.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const formatDate = (dateString?: string) => {
@@ -190,15 +223,15 @@ export default function UserManagement() {
     });
   };
 
-const [currentPage, setCurrentPage] = useState(1);
-const usersPerPage = 5;
+  const [currentPage, setCurrentPage] = useState(1);
+  const usersPerPage = 5;
 
-const paginatedUsers = filteredUsers.slice(
-  (currentPage - 1) * usersPerPage,
-  currentPage * usersPerPage
-);
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * usersPerPage,
+    currentPage * usersPerPage
+  );
 
-const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
+  const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
 
   return (
     <div>
@@ -209,13 +242,16 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
             <h1 className="text-2xl font-semibold text-gray-900 mb-1">User Management</h1>
             <p className="text-gray-600">Manage firm user accounts and system access</p>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add User
-          </button>
+
+          {canManageUsers && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add User
+            </button>
+          )}
         </div>
 
         {/* Alerts */}
@@ -243,183 +279,168 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
         </div>
       </div>
 
-      {/* Loading State */}
-      {loading && (
-        <div className="text-center py-8 text-gray-600">Loading users...</div>
+      {loading && <div className="text-center py-8 text-gray-600">Loading users...</div>}
+
+      {!loading && (
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">No.</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">User</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Role</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Last Login</th>
+                  {canManageUsers && (
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
+                  )}
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-gray-200">
+                {paginatedUsers.map((u, idx) => (
+                  <tr key={u._id} className="hover:bg-gray-50">
+                    <td className="px-5 py-4 text-sm text-gray-500">
+                      {(currentPage - 1) * usersPerPage + idx + 1}
+                    </td>
+                    <td className="px-5 py-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{u.name}</p>
+                        <p className="text-xs text-gray-500">{u.email}</p>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className={`px-2 py-1 text-xs rounded ${getRoleColor(u.role)}`}>
+                        {ROLE_DISPLAY_MAP[u.role] || u.role}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className={`px-2 py-1 text-xs rounded ${getStatusColor(u.isActive)}`}>
+                        {u.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-sm text-gray-600">{formatDate(u.lastLogin)}</td>
+
+                    {canManageUsers && (
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleToggleStatus(u._id, u.isActive)}
+                            className={`p-1 ${u.isActive ? 'text-green-600 hover:text-red-600' : 'text-gray-400 hover:text-green-600'}`}
+                            title={u.isActive ? 'Deactivate' : 'Activate'}
+                          >
+                            {u.isActive ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
+                          </button>
+
+                          <button
+                            className="p-1 text-gray-600 hover:text-blue-600"
+                            title="Reset Password"
+                            onClick={() => { setSelectedUser(u); setShowResetModal(true); }}
+                          >
+                            <Key className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            className="p-1 text-gray-600 hover:text-gray-900"
+                            title="Edit"
+                            onClick={() => {
+                              setSelectedUser(u);
+                              setEditForm({ name: u.name, email: u.email, role: u.role });
+                              setShowEditModal(true);
+                            }}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            className="p-1 text-red-600 hover:text-red-900"
+                            title="Delete"
+                            onClick={() => handleDeleteUser(u._id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center gap-2 mt-4 pb-4">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 border rounded disabled:opacity-50"
+              >
+                Prev
+              </button>
+              {[...Array(totalPages)].map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`px-3 py-1 border rounded ${currentPage === i + 1 ? 'bg-gray-800 text-white' : ''}`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 border rounded disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Users Table */}
-{!loading && (
-  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead className="bg-gray-50 border-b border-gray-200">
-          <tr>
-            <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-              No.
-            </th>
-            <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-              User
-            </th>
-            <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-              Role
-            </th>
-            <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-              Status
-            </th>
-            <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-              Last Login
-            </th>
-            <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {paginatedUsers.map((user, idx) => (
-            <tr key={user._id} className="hover:bg-gray-50">
-              <td className="px-5 py-4 text-sm text-gray-500">
-                {(currentPage - 1) * usersPerPage + idx + 1}
-              </td>
-              <td className="px-5 py-4">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                  <p className="text-xs text-gray-500">{user.email}</p>
-                </div>
-              </td>
-              <td className="px-5 py-4">
-                <span className={`px-2 py-1 text-xs rounded ${getRoleColor(user.role)}`}>
-                  {ROLE_DISPLAY_MAP[user.role] || user.role}
-                </span>
-              </td>
-              <td className="px-5 py-4">
-                <span className={`px-2 py-1 text-xs rounded ${getStatusColor(user.isActive)}`}>
-                  {user.isActive ? 'Active' : 'Inactive'}
-                </span>
-              </td>
-              <td className="px-5 py-4 text-sm text-gray-600">
-                {formatDate(user.lastLogin)}
-              </td>
-              <td className="px-5 py-4">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleToggleStatus(user._id, user.isActive)}
-                    className={`p-1 ${user.isActive ? 'text-green-600 hover:text-red-600' : 'text-gray-400 hover:text-green-600'}`}
-                    title={user.isActive ? 'Deactivate' : 'Activate'}
-                  >
-                    {user.isActive ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
-                  </button>
-                  <button
-                    className="p-1 text-gray-600 hover:text-blue-600"
-                    title="Reset Password"
-                    onClick={() => { setSelectedUser(user); setShowResetModal(true); }}
-                  >
-                    <Key className="w-4 h-4" />
-                  </button>
-                  <button
-                    className="p-1 text-gray-600 hover:text-gray-900"
-                    title="Edit"
-                    onClick={() => {
-                      setSelectedUser(user);
-                      setEditForm({
-                        name: user.name,
-                        email: user.email,
-                        role: user.role,
-                      });
-                      setShowEditModal(true);
-                    }}
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    className="p-1 text-red-600 hover:text-red-900"
-                    title="Delete"
-                    onClick={() => handleDeleteUser(user._id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-
-    {/* Pagination Controls */}
-    {totalPages > 1 && (
-      <div className="flex justify-center items-center gap-2 mt-4">
-        <button
-          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-          disabled={currentPage === 1}
-          className="px-3 py-1 border rounded disabled:opacity-50"
-        >
-          Prev
-        </button>
-        {[...Array(totalPages)].map((_, i) => (
-          <button
-            key={i}
-            onClick={() => setCurrentPage(i + 1)}
-            className={`px-3 py-1 border rounded ${currentPage === i + 1 ? 'bg-gray-800 text-white' : ''}`}
-          >
-            {i + 1}
-          </button>
-        ))}
-        <button
-          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-          disabled={currentPage === totalPages}
-          className="px-3 py-1 border rounded disabled:opacity-50"
-        >
-          Next
-        </button>
-      </div>
-    )}
-  </div>
-)}
-
       {/* Stats */}
-<div className="mt-6 flex flex-wrap gap-4">
-  {/* Total Users */}
-  <div className="flex-1 min-w-[140px] bg-white border border-gray-200 rounded-lg p-4 text-center">
-    <div className="text-sm text-gray-600 mb-1">Total Users</div>
-    <div className="text-2xl font-semibold text-gray-900">{users.length}</div>
-  </div>
-  {/* Active Users */}
-  <div className="flex-1 min-w-[140px] bg-white border border-gray-200 rounded-lg p-4 text-center">
-    <div className="text-sm text-gray-600 mb-1">Active Users</div>
-    <div className="text-2xl font-semibold text-green-600">
-      {users.filter((u) => u.isActive).length}
-    </div>
-  </div>
-  {/* Role-based stats */}
-  {ROLE_OPTIONS.map(opt => (
-    <div key={opt.value} className="flex-1 min-w-[140px] bg-white border border-gray-200 rounded-lg p-4 text-center">
-      <div className="text-sm text-gray-600 mb-1">{opt.label}s</div>
-      <div className="text-2xl font-semibold text-gray-900">
-        {users.filter((u) => u.role === opt.value).length}
+      <div className="mt-6 flex flex-wrap gap-4">
+        <div className="flex-1 min-w-[140px] bg-white border border-gray-200 rounded-lg p-4 text-center">
+          <div className="text-sm text-gray-600 mb-1">Total Users</div>
+          <div className="text-2xl font-semibold text-gray-900">{users.length}</div>
+        </div>
+
+        <div className="flex-1 min-w-[140px] bg-white border border-gray-200 rounded-lg p-4 text-center">
+          <div className="text-sm text-gray-600 mb-1">Active Users</div>
+          <div className="text-2xl font-semibold text-green-600">
+            {users.filter((x) => x.isActive).length}
+          </div>
+        </div>
+
+        {ROLE_OPTIONS.map(opt => (
+          <div key={opt.value} className="flex-1 min-w-[140px] bg-white border border-gray-200 rounded-lg p-4 text-center">
+            <div className="text-sm text-gray-600 mb-1">{opt.label}s</div>
+            <div className="text-2xl font-semibold text-gray-900">
+              {users.filter((x) => x.role === opt.value).length}
+            </div>
+          </div>
+        ))}
       </div>
-    </div>
-  ))}
-</div>
 
       {/* Add User Modal */}
-      {showAddModal && (
+      {canManageUsers && showAddModal && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <div className="flex items-center mb-4">
               <UserPlus className="w-6 h-6 text-gray-700 mr-2" />
               <h3 className="text-lg font-semibold text-gray-900">Add New User</h3>
             </div>
+
             {error && (
               <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
                 {error}
               </div>
             )}
+
             <form onSubmit={handleAddUser} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Full Name
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                 <input
                   type="text"
                   value={form.name}
@@ -429,10 +450,9 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
                   placeholder="Enter user Full name"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
                 <input
                   type="email"
                   value={form.email}
@@ -442,10 +462,9 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
                   placeholder="Enter user Email"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Role
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                 <select
                   value={form.role}
                   onChange={(e) => setForm(f => ({ ...f, role: e.target.value }))}
@@ -456,10 +475,9 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
                   ))}
                 </select>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Initial Password
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Initial Password</label>
                 <input
                   type="password"
                   value={form.password}
@@ -470,6 +488,7 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
                   placeholder="••••••••"
                 />
               </div>
+
               <div className="flex gap-3 mt-6">
                 <button
                   type="button"
@@ -491,18 +510,17 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
       )}
 
       {/* Edit User Modal */}
-      {showEditModal && selectedUser && (
+      {canManageUsers && showEditModal && selectedUser && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <div className="flex items-center mb-4">
               <Edit className="w-6 h-6 text-gray-700 mr-2" />
               <h3 className="text-lg font-semibold text-gray-900">Edit User</h3>
             </div>
+
             <form onSubmit={handleEditUser} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Full Name
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                 <input
                   type="text"
                   value={editForm.name || ''}
@@ -511,10 +529,9 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
                   className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
                 <input
                   type="email"
                   value={editForm.email || ''}
@@ -523,10 +540,9 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
                   className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Role
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                 <select
                   value={editForm.role || ''}
                   onChange={(e) => setEditForm(f => ({ ...f, role: e.target.value }))}
@@ -537,6 +553,7 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
                   ))}
                 </select>
               </div>
+
               <div className="flex gap-3 mt-6">
                 <button
                   type="button"
@@ -558,18 +575,17 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
       )}
 
       {/* Reset Password Modal */}
-      {showResetModal && selectedUser && (
+      {canManageUsers && showResetModal && selectedUser && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <div className="flex items-center mb-4">
               <Key className="w-6 h-6 text-gray-700 mr-2" />
               <h3 className="text-lg font-semibold text-gray-900">Reset Password</h3>
             </div>
-            <form onSubmit={handleResetPassword} className="space-y-4">
+
+            <form onSubmit={handleResetUserPassword} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  New Password
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
                 <input
                   type="password"
                   value={resetPassword}
@@ -580,6 +596,7 @@ const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
                   placeholder="••••••••"
                 />
               </div>
+
               <div className="flex gap-3 mt-6">
                 <button
                   type="button"

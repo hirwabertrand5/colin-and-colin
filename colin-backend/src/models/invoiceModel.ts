@@ -11,7 +11,13 @@ export interface IInvoice extends Document {
   date: string;
   amount: number;
   status: 'Paid' | 'Pending';
+
+  // ✅ Proof of payment (existing)
   proofUrl?: string;
+
+  // ✅ Invoice document file (NEW)
+  invoiceFileUrl?: string;
+
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -30,7 +36,12 @@ const InvoiceSchema = new Schema<IInvoice>(
     date: { type: String, required: true },
     amount: { type: Number, required: true },
     status: { type: String, enum: ['Paid', 'Pending'], default: 'Pending' },
+
     proofUrl: { type: String },
+
+    // ✅ NEW field
+    invoiceFileUrl: { type: String },
+
     notes: { type: String },
   },
   { timestamps: true }

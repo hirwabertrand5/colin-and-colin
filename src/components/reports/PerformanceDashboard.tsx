@@ -1,13 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  TrendingUp,
-  CheckSquare,
-  Clock,
-  Award,
-  AlertTriangle,
-  Calendar,
-} from 'lucide-react';
+import { TrendingUp, CheckSquare, Clock, Award, AlertTriangle, Calendar } from 'lucide-react';
 import { UserRole } from '../../App';
 import { getMyPerformance, PerformanceSummary } from '../../services/performanceService';
 import { getAllTasks, TaskData } from '../../services/taskService';
@@ -25,6 +18,23 @@ const startOfMonthISO = () => {
   d.setDate(1);
   d.setHours(0, 0, 0, 0);
   return d.toISOString().slice(0, 10);
+};
+
+const ratingLabel = (v?: number) => {
+  switch (v) {
+    case 5:
+      return 'Excellent';
+    case 4:
+      return 'Very Good';
+    case 3:
+      return 'Good';
+    case 2:
+      return 'Needs Improvement';
+    case 1:
+      return 'Poor';
+    default:
+      return '—';
+  }
 };
 
 export default function PerformanceDashboard({ userRole }: PerformanceDashboardProps) {
@@ -65,7 +75,7 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
   }, [userRole]);
 
   // --------------------------
-  // Workflow signals (real)
+  // Workflow signals (based on tasks list)
   // --------------------------
   const workflowSignals = useMemo(() => {
     const isCompleted = (t: TaskData) => t.status === 'Completed';
@@ -77,13 +87,13 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
       .slice(0, 5);
 
-    const pendingApprovals = tasks.filter(
-      (t) => t.requiresApproval && t.approvalStatus === 'Pending'
-    );
+    const pendingApprovals = tasks.filter((t) => t.requiresApproval && t.approvalStatus === 'Pending');
 
+    // We don't have completedAt in TaskData (unless you extend it).
+    // Keep a best-effort fallback: updatedAt.
     const completedThisMonth = tasks.filter((t) => {
       if (!isCompleted(t)) return false;
-      const updated = String(t.updatedAt || '').slice(0, 10);
+      const updated = String((t as any).completedAt || t.updatedAt || '').slice(0, 10);
       return updated && updated >= monthStart;
     });
 
@@ -98,7 +108,7 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
   }, [tasks, today, monthStart]);
 
   // --------------------------
-  // KPI cards
+  // KPI cards (now include rating + approvals)
   // --------------------------
   const stats = useMemo(() => {
     const tasksCompleted = data?.tasksCompleted ?? 0;
@@ -109,8 +119,10 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
 
     const onTime = data?.onTimeCompletionPct ?? 0;
 
-    // Professional delivery fix:
-    // If there are NO tasks at all, overdue KPI should be N/A (not 100%).
+    const rating = data?.rating?.value;
+    const approvalRate = data?.approvals?.approvalRatePct ?? 0;
+    const rejected = data?.approvals?.rejected ?? 0;
+
     const hasAnyTasks = workflowSignals.totalTasks > 0;
     const overdue = workflowSignals.overdueCount;
 
@@ -119,6 +131,14 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
     const overduePercentage = hasAnyTasks ? (overdue === 0 ? 100 : 0) : 0;
 
     return [
+      {
+        label: 'Rating (1–5)',
+        value: rating ? `${rating}/5` : '—',
+        target: '5/5',
+        icon: Award,
+        percentage: rating ? Math.round((rating / 5) * 100) : 0,
+        helper: rating ? ratingLabel(rating) : '',
+      },
       {
         label: 'Tasks Completed',
         value: String(tasksCompleted),
@@ -132,6 +152,14 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
         target: String(hoursTarget),
         icon: Clock,
         percentage: hoursTarget > 0 ? Math.round((billableHours / hoursTarget) * 100) : 0,
+      },
+      {
+        label: 'Approval Rate',
+        value: `${approvalRate}%`,
+        target: '90%',
+        icon: TrendingUp,
+        percentage: approvalRate,
+        helper: `Rejected: ${rejected}`,
       },
       {
         label: 'On-time Completion',
@@ -185,6 +213,15 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
 
     const list: Array<{ title: string; description: string; icon: any; color: string }> = [];
 
+    if (perf.rating?.value) {
+      list.push({
+        title: `Rating: ${perf.rating.value}/5 (${ratingLabel(perf.rating.value)})`,
+        description: `Productivity ${perf.rating.productivityScore}% • Quality ${perf.rating.qualityScore}% • Reliability ${perf.rating.reliabilityScore}%`,
+        icon: Award,
+        color: perf.rating.value >= 4 ? 'bg-green-100 text-green-700' : perf.rating.value >= 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700',
+      });
+    }
+
     if (completed > 0) {
       list.push({
         title: `Completed ${completed} tasks`,
@@ -205,7 +242,7 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
 
     list.push({
       title: `On-time completion: ${onTime}%`,
-      description: `Uses due dates (accurate completion time requires completedAt field)`,
+      description: `Uses completedAt (backend) compared to due dates`,
       icon: TrendingUp,
       color: onTime >= 90 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700',
     });
@@ -217,17 +254,8 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
       color: 'bg-purple-100 text-purple-700',
     });
 
-    if (workflowSignals.totalTasks > 0 && workflowSignals.overdueCount === 0) {
-      list.push({
-        title: `No overdue tasks`,
-        description: `Great deadline discipline—keep it up.`,
-        icon: Award,
-        color: 'bg-green-100 text-green-700',
-      });
-    }
-
     return list.slice(0, 4);
-  }, [data, workflowSignals.totalTasks, workflowSignals.overdueCount]);
+  }, [data]);
 
   if (!canAccess(userRole)) {
     return (
@@ -244,11 +272,7 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900 mb-1">My Performance</h1>
         <p className="text-gray-600">
-          {loading
-            ? 'Loading…'
-            : data
-            ? `Period: ${data.range.from} → ${data.range.to}`
-            : 'Track your productivity and achievements'}
+          {loading ? 'Loading…' : data ? `Period: ${data.range.from} → ${data.range.to}` : 'Track your productivity and achievements'}
         </p>
       </div>
 
@@ -259,7 +283,7 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
         {stats.map((stat) => {
           const Icon = stat.icon;
           const isAboveTarget = stat.percentage >= 100;
@@ -270,21 +294,16 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
                 <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
                   <Icon className="w-5 h-5 text-gray-700" />
                 </div>
-                <div
-                  className={`flex items-center text-xs ${
-                    isAboveTarget ? 'text-green-600' : 'text-yellow-600'
-                  }`}
-                >
+                <div className={`flex items-center text-xs ${isAboveTarget ? 'text-green-600' : 'text-yellow-600'}`}>
                   <TrendingUp className="w-3 h-3 mr-1" />
                   {loading ? '…' : `${stat.percentage}%`}
                 </div>
               </div>
 
-              <div className="text-2xl font-semibold text-gray-900 mb-1">
-                {loading ? '…' : stat.value}
-              </div>
+              <div className="text-2xl font-semibold text-gray-900 mb-1">{loading ? '…' : stat.value}</div>
               <div className="text-sm text-gray-600 mb-2">{stat.label}</div>
               <div className="text-xs text-gray-500">Target: {stat.target}</div>
+              {stat.helper ? <div className="text-xs text-gray-500 mt-1">{stat.helper}</div> : null}
 
               <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
                 <div
@@ -477,7 +496,7 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
               </div>
 
               <p className="text-xs text-gray-500">
-                These signals are generated automatically from task deadlines, approvals, and time logs.
+                These signals are generated automatically from task deadlines and approval workflow status.
               </p>
             </div>
           )}

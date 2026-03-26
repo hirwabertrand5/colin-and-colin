@@ -123,3 +123,63 @@ export const uploadProof = async (req: Request, res: Response) => {
   }
 };
 
+// ✅ NEW: upload invoice file (separate from proof)
+export const uploadInvoiceFile = async (req: Request, res: Response) => {
+  try {
+    const invoiceId = req.params.invoiceId;
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+    const existing = await Invoice.findById(invoiceId);
+    if (!existing) return res.status(404).json({ message: 'Invoice not found.' });
+
+    const updated = await Invoice.findByIdAndUpdate(
+      invoiceId,
+      { invoiceFileUrl: `/uploads/${req.file.filename}` },
+      { new: true }
+    );
+
+    const actorName = (req as any).user?.name || 'System';
+    const actorUserId = (req as any).user?.id;
+
+    await writeAudit({
+      caseId: String(existing.caseId),
+      actorName,
+      actorUserId,
+      action: 'INVOICE_UPDATED',
+      message: 'Uploaded invoice file',
+      detail: existing.invoiceNo,
+    });
+
+    res.json(updated);
+  } catch {
+    res.status(500).json({ message: 'Failed to upload invoice file.' });
+  }
+};
+
+// ✅ NEW: delete invoice
+export const deleteInvoice = async (req: Request, res: Response) => {
+  try {
+    const invoiceId = req.params.invoiceId;
+
+    const existing = await Invoice.findById(invoiceId);
+    if (!existing) return res.status(404).json({ message: 'Invoice not found.' });
+
+    await Invoice.findByIdAndDelete(invoiceId);
+
+    const actorName = (req as any).user?.name || 'System';
+    const actorUserId = (req as any).user?.id;
+
+    await writeAudit({
+      caseId: String(existing.caseId),
+      actorName,
+      actorUserId,
+      action: 'INVOICE_DELETED',
+      message: 'Deleted invoice',
+      detail: existing.invoiceNo,
+    });
+
+    res.json({ message: 'Invoice deleted.' });
+  } catch {
+    res.status(500).json({ message: 'Failed to delete invoice.' });
+  }
+};

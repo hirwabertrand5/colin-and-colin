@@ -15,6 +15,9 @@ export default function CaseList({ userRole }: CaseListProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const isAssociate = userRole === 'associate';
+  const canManageCases = userRole === 'managing_director' || userRole === 'executive_assistant';
+
   useEffect(() => {
     loadCases();
     // eslint-disable-next-line
@@ -69,7 +72,7 @@ export default function CaseList({ userRole }: CaseListProps) {
     }
   };
 
-  const filteredCases = cases.filter(c => {
+  const filteredCases = cases.filter((c) => {
     const matchesSearch =
       c.parties?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.caseNo?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -86,15 +89,16 @@ export default function CaseList({ userRole }: CaseListProps) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900 mb-1">
-              Case Management
+              {isAssociate ? 'My Cases' : 'Case Management'}
             </h1>
             <p className="text-gray-600">
-              Track firm-wide matters, assignments, and progress
+              {isAssociate
+                ? 'Cases assigned to you'
+                : 'Track firm-wide matters, assignments, and progress'}
             </p>
           </div>
 
-          {(userRole === 'managing_director' ||
-            userRole === 'executive_assistant') && (
+          {canManageCases && (
             <Link
               to="/cases/new"
               className="inline-flex items-center px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition"
@@ -134,10 +138,12 @@ export default function CaseList({ userRole }: CaseListProps) {
             <option value="Execution">Execution</option>
           </select>
 
-          <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition">
-            <Filter className="w-4 h-4 mr-2" />
-            More Filters
-          </button>
+          {!isAssociate && (
+            <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition">
+              <Filter className="w-4 h-4 mr-2" />
+              More Filters
+            </button>
+          )}
         </div>
       </div>
 
@@ -162,9 +168,9 @@ export default function CaseList({ userRole }: CaseListProps) {
                   'Status',
                   'Priority',
                   'Assigned To',
-                  'Last Updated',
-                  'Actions'
-                ].map(header => (
+                  'Date Created',
+                  'Actions',
+                ].map((header) => (
                   <th
                     key={header}
                     className="px-6 py-4 text-left text-xs font-medium text-gray-600 uppercase tracking-wider"
@@ -177,46 +183,37 @@ export default function CaseList({ userRole }: CaseListProps) {
 
             <tbody className="divide-y divide-gray-200">
               {filteredCases.map((item, index) => (
-                <tr
-                  key={item._id}
-                  className="hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-6 py-5 text-sm text-gray-500">
-                    {index + 1}
-                  </td>
-                  <td className="px-6 py-5 text-sm font-medium text-gray-900">
-                    {item.caseNo}
-                  </td>
-                  <td className="px-6 py-5 text-sm text-gray-900">
-                    {item.parties}
-                  </td>
-                  <td className="px-6 py-5 text-sm text-gray-600">
-                    {item.caseType}
-                  </td>
+                <tr key={item._id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-5 text-sm text-gray-500">{index + 1}</td>
+
+                  <td className="px-6 py-5 text-sm font-medium text-gray-900">{item.caseNo}</td>
+
+                  <td className="px-6 py-5 text-sm text-gray-900">{item.parties}</td>
+
+                  <td className="px-6 py-5 text-sm text-gray-600">{item.caseType}</td>
+
                   <td className="px-6 py-5">
                     <span
-                      className={`px-3 py-1 text-xs font-medium rounded-md ${getStatusColor(
-                        item.status || ''
-                      )}`}
+                      className={`px-3 py-1 text-xs font-medium rounded-md ${getStatusColor(item.status || '')}`}
                     >
                       {item.status}
                     </span>
                   </td>
+
                   <td className="px-6 py-5">
                     <span
-                      className={`px-3 py-1 text-xs font-medium rounded-md ${getPriorityColor(
-                        item.priority || ''
-                      )}`}
+                      className={`px-3 py-1 text-xs font-medium rounded-md ${getPriorityColor(item.priority || '')}`}
                     >
                       {item.priority}
                     </span>
                   </td>
-                  <td className="px-6 py-5 text-sm text-gray-600">
-                    {item.assignedTo}
-                  </td>
+
+                  <td className="px-6 py-5 text-sm text-gray-600">{item.assignedTo}</td>
+
                   <td className="px-6 py-5 text-sm text-gray-500">
                     {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : ''}
                   </td>
+
                   <td className="px-6 py-5">
                     <Link
                       to={`/cases/${item._id}`}
@@ -231,16 +228,12 @@ export default function CaseList({ userRole }: CaseListProps) {
           </table>
         </div>
 
-        {loading && (
-          <div className="text-center py-12 text-gray-500">Loading cases...</div>
-        )}
+        {loading && <div className="text-center py-12 text-gray-500">Loading cases...</div>}
 
         {!loading && filteredCases.length === 0 && (
           <div className="text-center py-12">
             <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">
-              No cases found
-            </p>
+            <p className="text-gray-500">No cases found</p>
           </div>
         )}
       </div>
