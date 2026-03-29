@@ -4,6 +4,7 @@ import { DollarSign, TrendingUp, TrendingDown, Receipt } from 'lucide-react';
 import { UserRole } from '../../App';
 import { getBillingSummary, BillingSummary } from '../../services/billingService';
 import { getRecentInvoices, InvoiceWithCase } from '../../services/invoiceService';
+import usePageTitle from '../../hooks/usePageTitle';
 
 interface BillingDashboardProps {
   userRole: UserRole;
@@ -21,7 +22,7 @@ export default function BillingDashboard({ userRole }: BillingDashboardProps) {
   const [recent, setRecent] = useState<InvoiceWithCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
+  usePageTitle('Billing & Finance');
   useEffect(() => {
     if (!canAccessBilling(userRole)) {
       navigate('/dashboard');

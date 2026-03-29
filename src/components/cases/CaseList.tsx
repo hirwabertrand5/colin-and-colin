@@ -3,12 +3,15 @@ import { Link } from 'react-router-dom';
 import { Plus, Search, Filter, Briefcase } from 'lucide-react';
 import { UserRole } from '../../App';
 import { getAllCases, CaseData } from '../../services/caseService';
+import usePageTitle from '../../hooks/usePageTitle';
 
 interface CaseListProps {
   userRole: UserRole;
 }
 
 export default function CaseList({ userRole }: CaseListProps) {
+  usePageTitle('Cases');
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [cases, setCases] = useState<CaseData[]>([]);
@@ -53,6 +56,9 @@ export default function CaseList({ userRole }: CaseListProps) {
     switch (status) {
       case 'On Boarding':
         return 'bg-gray-100 text-gray-700';
+      case 'Submission':
+      case 'Under Submission':
+        return 'bg-orange-100 text-orange-700';
       case 'Pre trial':
         return 'bg-indigo-100 text-indigo-600';
       case 'Mediation':
@@ -92,9 +98,7 @@ export default function CaseList({ userRole }: CaseListProps) {
               {isAssociate ? 'My Cases' : 'Case Management'}
             </h1>
             <p className="text-gray-600">
-              {isAssociate
-                ? 'Cases assigned to you'
-                : 'Track firm-wide matters, assignments, and progress'}
+              {isAssociate ? 'Cases assigned to you' : 'Track firm-wide matters, assignments, and progress'}
             </p>
           </div>
 
@@ -129,6 +133,8 @@ export default function CaseList({ userRole }: CaseListProps) {
           >
             <option value="all">All Status</option>
             <option value="On Boarding">On Boarding</option>
+            <option value="Submission">Submission</option>
+            <option value="Under Submission">Under Submission</option>
             <option value="Pre trial">Pre trial</option>
             <option value="Mediation">Mediation</option>
             <option value="Hearing">Hearing</option>
@@ -169,6 +175,7 @@ export default function CaseList({ userRole }: CaseListProps) {
                   'Priority',
                   'Assigned To',
                   'Date Created',
+                  'Last Updated',
                   'Actions',
                 ].map((header) => (
                   <th
@@ -193,17 +200,13 @@ export default function CaseList({ userRole }: CaseListProps) {
                   <td className="px-6 py-5 text-sm text-gray-600">{item.caseType}</td>
 
                   <td className="px-6 py-5">
-                    <span
-                      className={`px-3 py-1 text-xs font-medium rounded-md ${getStatusColor(item.status || '')}`}
-                    >
+                    <span className={`px-3 py-1 text-xs font-medium rounded-md ${getStatusColor(item.status || '')}`}>
                       {item.status}
                     </span>
                   </td>
 
                   <td className="px-6 py-5">
-                    <span
-                      className={`px-3 py-1 text-xs font-medium rounded-md ${getPriorityColor(item.priority || '')}`}
-                    >
+                    <span className={`px-3 py-1 text-xs font-medium rounded-md ${getPriorityColor(item.priority || '')}`}>
                       {item.priority}
                     </span>
                   </td>
@@ -211,14 +214,15 @@ export default function CaseList({ userRole }: CaseListProps) {
                   <td className="px-6 py-5 text-sm text-gray-600">{item.assignedTo}</td>
 
                   <td className="px-6 py-5 text-sm text-gray-500">
+                    {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}
+                  </td>
+
+                  <td className="px-6 py-5 text-sm text-gray-500">
                     {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : ''}
                   </td>
 
                   <td className="px-6 py-5">
-                    <Link
-                      to={`/cases/${item._id}`}
-                      className="text-sm font-medium text-gray-700 hover:text-gray-900"
-                    >
+                    <Link to={`/cases/${item._id}`} className="text-sm font-medium text-gray-700 hover:text-gray-900">
                       Open →
                     </Link>
                   </td>

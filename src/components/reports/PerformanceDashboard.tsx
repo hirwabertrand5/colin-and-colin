@@ -1,6 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { TrendingUp, CheckSquare, Clock, Award, AlertTriangle, Calendar } from 'lucide-react';
+import {
+  TrendingUp,
+  CheckSquare,
+  Clock,
+  Award,
+  AlertTriangle,
+  Calendar as CalendarIcon,
+} from 'lucide-react';
+
 import { UserRole } from '../../App';
 import { getMyPerformance, PerformanceSummary } from '../../services/performanceService';
 import { getAllTasks, TaskData } from '../../services/taskService';
@@ -8,6 +16,16 @@ import { getAllTasks, TaskData } from '../../services/taskService';
 interface PerformanceDashboardProps {
   userRole: UserRole;
 }
+
+type StatCard = {
+  label: string;
+  value: string;
+  target?: string;
+  helper?: string;
+  icon: React.ComponentType<any>;
+  color?: 'red';
+  trendText?: string; // right-side small indicator text
+};
 
 const canAccess = (role: UserRole) =>
   role === 'associate' || role === 'managing_director' || role === 'executive_assistant';
@@ -87,10 +105,11 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
       .slice(0, 5);
 
-    const pendingApprovals = tasks.filter((t) => t.requiresApproval && t.approvalStatus === 'Pending');
+    const pendingApprovals = tasks.filter(
+      (t) => t.requiresApproval && t.approvalStatus === 'Pending'
+    );
 
-    // We don't have completedAt in TaskData (unless you extend it).
-    // Keep a best-effort fallback: updatedAt.
+    // Keep best-effort fallback: completedAt -> updatedAt
     const completedThisMonth = tasks.filter((t) => {
       if (!isCompleted(t)) return false;
       const updated = String((t as any).completedAt || t.updatedAt || '').slice(0, 10);
@@ -108,72 +127,65 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
   }, [tasks, today, monthStart]);
 
   // --------------------------
-  // KPI cards (now include rating + approvals)
+  // Stats (reformatted UI like AssociateDashboard cards)
   // --------------------------
-  const stats = useMemo(() => {
-    const tasksCompleted = data?.tasksCompleted ?? 0;
-    const tasksTarget = Math.max(1, Math.round((data?.tasksTotal ?? 0) * 1.2));
-
-    const billableHours = data?.billableHours ?? 0;
-    const hoursTarget = Math.max(1, Math.round(billableHours * 1.15));
-
-    const onTime = data?.onTimeCompletionPct ?? 0;
-
+  const stats: StatCard[] = useMemo(() => {
     const rating = data?.rating?.value;
     const approvalRate = data?.approvals?.approvalRatePct ?? 0;
     const rejected = data?.approvals?.rejected ?? 0;
 
-    const hasAnyTasks = workflowSignals.totalTasks > 0;
-    const overdue = workflowSignals.overdueCount;
+    const tasksCompleted = data?.tasksCompleted ?? 0;
+    const tasksTotal = data?.tasksTotal ?? 0;
 
-    const overdueValue = hasAnyTasks ? String(overdue) : '—';
-    const overdueTarget = hasAnyTasks ? '0' : '—';
-    const overduePercentage = hasAnyTasks ? (overdue === 0 ? 100 : 0) : 0;
+    const billableHours = data?.billableHours ?? 0;
+    const onTime = data?.onTimeCompletionPct ?? 0;
+
+    const hasAnyTasks = workflowSignals.totalTasks > 0;
 
     return [
       {
         label: 'Rating (1–5)',
         value: rating ? `${rating}/5` : '—',
-        target: '5/5',
-        icon: Award,
-        percentage: rating ? Math.round((rating / 5) * 100) : 0,
         helper: rating ? ratingLabel(rating) : '',
+        icon: Award,
+        trendText: rating ? `${Math.round((rating / 5) * 100)}%` : '—',
       },
       {
         label: 'Tasks Completed',
         value: String(tasksCompleted),
-        target: String(tasksTarget),
+        helper: `In period: ${tasksTotal} total`,
         icon: CheckSquare,
-        percentage: tasksTarget > 0 ? Math.round((tasksCompleted / tasksTarget) * 100) : 0,
+        trendText:
+          tasksTotal > 0 ? `${Math.round((tasksCompleted / Math.max(1, tasksTotal)) * 100)}%` : '—',
       },
       {
         label: 'Billable Hours',
         value: String(billableHours),
-        target: String(hoursTarget),
+        helper: 'From time logs (period)',
         icon: Clock,
-        percentage: hoursTarget > 0 ? Math.round((billableHours / hoursTarget) * 100) : 0,
+        trendText: billableHours ? 'MTD' : '—',
       },
       {
         label: 'Approval Rate',
         value: `${approvalRate}%`,
-        target: '90%',
-        icon: TrendingUp,
-        percentage: approvalRate,
         helper: `Rejected: ${rejected}`,
+        icon: TrendingUp,
+        trendText: approvalRate ? `${approvalRate}%` : '—',
       },
       {
         label: 'On-time Completion',
         value: `${onTime}%`,
-        target: '90%',
+        helper: 'Completed vs due date',
         icon: TrendingUp,
-        percentage: onTime,
+        trendText: onTime ? `${onTime}%` : '—',
       },
       {
         label: 'Overdue Tasks',
-        value: overdueValue,
-        target: overdueTarget,
+        value: hasAnyTasks ? String(workflowSignals.overdueCount) : '—',
+        helper: hasAnyTasks ? 'Should be 0' : '',
         icon: AlertTriangle,
-        percentage: overduePercentage,
+        color: workflowSignals.overdueCount ? 'red' : undefined,
+        trendText: hasAnyTasks ? (workflowSignals.overdueCount ? 'Action needed' : 'Healthy') : '—',
       },
     ];
   }, [data, workflowSignals.totalTasks, workflowSignals.overdueCount]);
@@ -200,7 +212,7 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
   }, [data]);
 
   // --------------------------
-  // Achievements (auto-generated)
+  // Achievements
   // --------------------------
   const achievements = useMemo(() => {
     const perf = data;
@@ -218,7 +230,12 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
         title: `Rating: ${perf.rating.value}/5 (${ratingLabel(perf.rating.value)})`,
         description: `Productivity ${perf.rating.productivityScore}% • Quality ${perf.rating.qualityScore}% • Reliability ${perf.rating.reliabilityScore}%`,
         icon: Award,
-        color: perf.rating.value >= 4 ? 'bg-green-100 text-green-700' : perf.rating.value >= 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700',
+        color:
+          perf.rating.value >= 4
+            ? 'bg-green-100 text-green-700'
+            : perf.rating.value >= 3
+              ? 'bg-yellow-100 text-yellow-700'
+              : 'bg-red-100 text-red-700',
       });
     }
 
@@ -272,7 +289,11 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900 mb-1">My Performance</h1>
         <p className="text-gray-600">
-          {loading ? 'Loading…' : data ? `Period: ${data.range.from} → ${data.range.to}` : 'Track your productivity and achievements'}
+          {loading
+            ? 'Loading…'
+            : data
+              ? `Period: ${data.range.from} → ${data.range.to}`
+              : 'Track your productivity and achievements'}
         </p>
       </div>
 
@@ -282,43 +303,57 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
         </div>
       )}
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+      {/* Metrics Grid (match AssociateDashboard style) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         {stats.map((stat) => {
           const Icon = stat.icon;
-          const isAboveTarget = stat.percentage >= 100;
 
           return (
             <div key={stat.label} className="bg-white border border-gray-200 rounded-lg p-5">
               <div className="flex items-start justify-between mb-3">
-                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <Icon className="w-5 h-5 text-gray-700" />
-                </div>
-                <div className={`flex items-center text-xs ${isAboveTarget ? 'text-green-600' : 'text-yellow-600'}`}>
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  {loading ? '…' : `${stat.percentage}%`}
-                </div>
-              </div>
-
-              <div className="text-2xl font-semibold text-gray-900 mb-1">{loading ? '…' : stat.value}</div>
-              <div className="text-sm text-gray-600 mb-2">{stat.label}</div>
-              <div className="text-xs text-gray-500">Target: {stat.target}</div>
-              {stat.helper ? <div className="text-xs text-gray-500 mt-1">{stat.helper}</div> : null}
-
-              <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
                 <div
-                  className={`h-full ${isAboveTarget ? 'bg-green-600' : 'bg-yellow-500'}`}
-                  style={{ width: `${Math.min(stat.percentage, 100)}%` }}
-                />
+                  className={`w-10 h-10 ${
+                    stat.color === 'red' ? 'bg-red-100' : 'bg-gray-100'
+                  } rounded-lg flex items-center justify-center`}
+                >
+                  <Icon
+                    className={`w-5 h-5 ${
+                      stat.color === 'red' ? 'text-red-600' : 'text-gray-700'
+                    }`}
+                  />
+                </div>
+
+                <div className="flex items-center text-xs text-gray-500">
+                  <TrendingUp className="w-3 h-3 mr-1" />
+                  {loading ? '…' : stat.trendText || '—'}
+                </div>
               </div>
+
+              <div className="text-2xl font-semibold text-gray-900 mb-1">
+                {loading ? '…' : stat.value}
+              </div>
+              <div className="text-sm text-gray-600">{stat.label}</div>
+
+              {stat.target ? (
+                <div className="mt-1 text-xs text-gray-500">Target: {stat.target}</div>
+              ) : null}
+
+              {stat.helper ? <div className="mt-2 text-xs text-gray-500">{stat.helper}</div> : null}
+
+              {!loading && stat.label === 'Overdue Tasks' && workflowSignals.overdueCount > 0 ? (
+                <div className="mt-2 text-xs text-red-600">
+                  {workflowSignals.overdueCount} overdue (attention)
+                </div>
+              ) : null}
             </div>
           );
         })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Body layout (same modules, rearranged as clean panels) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Monthly Trend */}
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
+        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-6">
           <h2 className="font-semibold text-gray-900 mb-4">Monthly Performance Trend</h2>
 
           {loading ? (
@@ -350,8 +385,73 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
           )}
         </div>
 
+        {/* Workflow Signals (summary + due soon) */}
+        <div className="bg-white border border-gray-200 rounded-lg">
+          <div className="px-5 py-4 border-b border-gray-200">
+            <h2 className="font-semibold text-gray-900">Workflow Signals</h2>
+          </div>
+
+          {loading ? (
+            <div className="px-5 py-10 text-gray-500">Loading…</div>
+          ) : (
+            <div className="p-5 space-y-5">
+              <div className="flex flex-wrap gap-2">
+                <span className="px-2.5 py-1 text-xs rounded bg-gray-100 text-gray-700">
+                  Completed this month: <b>{workflowSignals.completedThisMonthCount}</b>
+                </span>
+                <span className="px-2.5 py-1 text-xs rounded bg-yellow-100 text-yellow-700">
+                  Pending approvals: <b>{workflowSignals.pendingApprovalsCount}</b>
+                </span>
+                <span
+                  className={`px-2.5 py-1 text-xs rounded ${
+                    workflowSignals.overdueCount ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                  }`}
+                >
+                  Overdue tasks: <b>{workflowSignals.overdueCount}</b>
+                </span>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <CalendarIcon className="w-4 h-4 text-gray-500" />
+                  <h3 className="text-sm font-medium text-gray-900">Due Soon</h3>
+                </div>
+
+                {workflowSignals.dueSoon.length === 0 ? (
+                  <div className="text-sm text-gray-500">No upcoming deadlines.</div>
+                ) : (
+                  <div className="divide-y divide-gray-200 border border-gray-200 rounded-lg">
+                    {workflowSignals.dueSoon.map((t) => (
+                      <div key={String(t._id)} className="p-3 flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm text-gray-900 font-medium">{t.title}</div>
+                          <div className="text-xs text-gray-500">
+                            Due {t.dueDate} • {t.priority} • {t.status}
+                          </div>
+                        </div>
+                        <Link
+                          to={`/tasks/${t._id}`}
+                          className="text-xs text-gray-700 hover:text-gray-900 underline"
+                        >
+                          View
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="px-5 py-3 border-t border-gray-200">
+            <Link to="/tasks" className="text-sm text-gray-600 hover:text-gray-900">
+              View all tasks →
+            </Link>
+          </div>
+        </div>
+
         {/* Tasks Breakdown */}
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
+        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-6">
           <h2 className="font-semibold text-gray-900 mb-4">Tasks Breakdown</h2>
 
           {loading ? (
@@ -376,7 +476,9 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div
-                        className={`h-full ${completionRate === 100 ? 'bg-green-600' : 'bg-blue-600'}`}
+                        className={`h-full ${
+                          completionRate === 100 ? 'bg-green-600' : 'bg-blue-600'
+                        }`}
                         style={{ width: `${completionRate}%` }}
                       />
                     </div>
@@ -388,7 +490,7 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
         </div>
 
         {/* Achievements */}
-        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-6">
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
           <h2 className="font-semibold text-gray-900 mb-4">Recent Achievements</h2>
 
           {loading ? (
@@ -396,7 +498,7 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
           ) : achievements.length === 0 ? (
             <div className="text-gray-500">No achievements yet.</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {achievements.map((a) => {
                 const Icon = a.icon;
                 return (
@@ -415,91 +517,51 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
               })}
             </div>
           )}
+
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <p className="text-xs text-gray-500">
+              Achievements are generated from rating, task completion, approvals and time logs (when available).
+            </p>
+          </div>
         </div>
 
-        {/* Workflow Signals */}
-        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-6">
-          <h2 className="font-semibold text-gray-900 mb-4">Workflow Signals</h2>
+        {/* Overdue Attention (kept module, separated like a panel) */}
+        <div className="lg:col-span-3 bg-white border border-gray-200 rounded-lg">
+          <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600" />
+              <h2 className="font-semibold text-gray-900">Overdue (Attention)</h2>
+            </div>
+            <span className="text-xs text-gray-500">
+              {loading ? '…' : `${workflowSignals.overdueTop.length} shown`}
+            </span>
+          </div>
 
           {loading ? (
-            <div className="text-gray-500">Loading…</div>
+            <div className="px-5 py-10 text-gray-500">Loading…</div>
+          ) : workflowSignals.overdueTop.length === 0 ? (
+            <div className="px-5 py-10 text-gray-500">No overdue tasks.</div>
           ) : (
-            <div className="space-y-5">
-              <div className="flex flex-wrap gap-2">
-                <span className="px-2.5 py-1 text-xs rounded bg-gray-100 text-gray-700">
-                  Completed this month: <b>{workflowSignals.completedThisMonthCount}</b>
-                </span>
-                <span className="px-2.5 py-1 text-xs rounded bg-yellow-100 text-yellow-700">
-                  Pending approvals: <b>{workflowSignals.pendingApprovalsCount}</b>
-                </span>
-                <span
-                  className={`px-2.5 py-1 text-xs rounded ${
-                    workflowSignals.overdueCount ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-                  }`}
-                >
-                  Overdue tasks: <b>{workflowSignals.overdueCount}</b>
-                </span>
-              </div>
-
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Calendar className="w-4 h-4 text-gray-500" />
-                  <h3 className="text-sm font-medium text-gray-900">Due Soon</h3>
-                </div>
-
-                {workflowSignals.dueSoon.length === 0 ? (
-                  <div className="text-sm text-gray-500">No upcoming deadlines.</div>
-                ) : (
-                  <div className="divide-y divide-gray-200 border border-gray-200 rounded-lg">
-                    {workflowSignals.dueSoon.map((t) => (
-                      <div key={String(t._id)} className="p-3 flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm text-gray-900 font-medium">{t.title}</div>
-                          <div className="text-xs text-gray-500">
-                            Due {t.dueDate} • {t.priority} • {t.status}
-                          </div>
-                        </div>
-                        <Link to={`/tasks/${t._id}`} className="text-xs text-gray-700 hover:text-gray-900 underline">
-                          View
-                        </Link>
-                      </div>
-                    ))}
+            <div className="divide-y divide-gray-200">
+              {workflowSignals.overdueTop.map((t) => (
+                <div key={String(t._id)} className="px-5 py-4 hover:bg-gray-50 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm text-gray-900 font-medium">{t.title}</div>
+                    <div className="text-xs text-red-700">Overdue since {t.dueDate} • {t.priority}</div>
                   </div>
-                )}
-              </div>
-
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertTriangle className="w-4 h-4 text-red-600" />
-                  <h3 className="text-sm font-medium text-gray-900">Overdue (Attention)</h3>
+                  <Link to={`/tasks/${t._id}`} className="text-xs text-gray-700 hover:text-gray-900 underline">
+                    View
+                  </Link>
                 </div>
-
-                {workflowSignals.overdueTop.length === 0 ? (
-                  <div className="text-sm text-gray-500">No overdue tasks.</div>
-                ) : (
-                  <div className="divide-y divide-gray-200 border border-gray-200 rounded-lg">
-                    {workflowSignals.overdueTop.map((t) => (
-                      <div key={String(t._id)} className="p-3 flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm text-gray-900 font-medium">{t.title}</div>
-                          <div className="text-xs text-red-700">
-                            Overdue since {t.dueDate} • {t.priority}
-                          </div>
-                        </div>
-                        <Link to={`/tasks/${t._id}`} className="text-xs text-gray-700 hover:text-gray-900 underline">
-                          View
-                        </Link>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <p className="text-xs text-gray-500">
-                These signals are generated automatically from task deadlines and approval workflow status.
-              </p>
+              ))}
             </div>
           )}
+
+          <div className="px-5 py-3 border-t border-gray-200">
+            <Link to="/tasks" className="text-sm text-gray-600 hover:text-gray-900">
+              Go to task board →
+            </Link>
+          </div>
         </div>
       </div>
     </div>

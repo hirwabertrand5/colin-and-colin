@@ -4,6 +4,7 @@ import { Search } from 'lucide-react';
 import { UserRole } from '../../App';
 import { getAllTasks, TaskData } from '../../services/taskService';
 import { getAllCases, CaseData } from '../../services/caseService';
+import usePageTitle from '../../hooks/usePageTitle';
 
 interface TaskBoardProps {
   userRole: UserRole;
@@ -12,6 +13,8 @@ interface TaskBoardProps {
 type BoardColumnId = 'Not Started' | 'In Progress' | 'Pending Approval' | 'Completed';
 
 export default function TaskBoard({ userRole }: TaskBoardProps) {
+  usePageTitle('Tasks');
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | BoardColumnId>('all');
   const [filterPriority, setFilterPriority] = useState<'all' | 'High' | 'Medium' | 'Low'>('all');
@@ -81,7 +84,12 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
   const columns: BoardColumnId[] = ['Not Started', 'In Progress', 'Pending Approval', 'Completed'];
 
   const counts = useMemo(() => {
-    const c = { 'Not Started': 0, 'In Progress': 0, 'Pending Approval': 0, Completed: 0 } as Record<BoardColumnId, number>;
+    const c = {
+      'Not Started': 0,
+      'In Progress': 0,
+      'Pending Approval': 0,
+      Completed: 0,
+    } as Record<BoardColumnId, number>;
     tasks.forEach((t) => c[getColumn(t)]++);
     return c;
   }, [tasks]);
@@ -108,22 +116,23 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
         </div>
       )}
 
-      {/* Search + Filters (Figma-like row) */}
-      <div className="mb-6 flex flex-col lg:flex-row gap-3">
+      {/* Search + Filters (match CaseList spacing/sizing) */}
+      <div className="mb-6 flex flex-col sm:flex-row gap-3">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
+            type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search tasks..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded bg-white"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-400 focus:outline-none"
           />
         </div>
 
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value as any)}
-          className="px-4 py-2 border border-gray-300 rounded bg-white"
+          className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-400 focus:outline-none"
         >
           <option value="all">All Status</option>
           <option value="Not Started">Not Started</option>
@@ -135,7 +144,7 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
         <select
           value={filterPriority}
           onChange={(e) => setFilterPriority(e.target.value as any)}
-          className="px-4 py-2 border border-gray-300 rounded bg-white"
+          className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-400 focus:outline-none"
         >
           <option value="all">All Priorities</option>
           <option value="High">High</option>

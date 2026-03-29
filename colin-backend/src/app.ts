@@ -19,6 +19,8 @@ import notificationRoutes from './routes/notifications';
 import timeLogRoutes from './routes/timeLogs';
 import taskAttachmentsRoutes from './routes/taskAttachments';
 import performanceRoutes from './routes/performance';
+import clientReportRoutes from './routes/clientReports';
+import dashboardRoutes from './routes/dashboard';
 
 const app = express();
 
@@ -74,7 +76,8 @@ app.use('/api/petty-cash', pettyCashRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/time-logs', timeLogRoutes);
 app.use('/api', taskAttachmentsRoutes);
-
+app.use('/api', clientReportRoutes);
+app.use('/api', dashboardRoutes);
 // uploads
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 

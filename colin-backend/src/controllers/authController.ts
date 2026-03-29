@@ -47,7 +47,7 @@ export const login = async (req: Request, res: Response) => {
       { id: user._id, name: user.name, role: user.role, email: user.email },
       secret,
       // You can change this later if you want longer sessions
-      { expiresIn: '15m' }
+      { expiresIn: '7d' }
     );
 
     return res.json({

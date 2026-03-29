@@ -94,11 +94,7 @@ export default function Login({ onLogin }: LoginProps) {
             </button>
           </form>
 
-          <div className="mt-5 text-center">
-            <Link to="/reset-password" className="text-sm text-gray-600 hover:text-gray-900">
-              Forgot password?
-            </Link>
-          </div>
+          
         </div>
       </div>
     </div>

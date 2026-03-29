@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { Search, Plus, Edit, UserPlus, Power, PowerOff, Key, Trash2 } from 'lucide-react';
+import usePageTitle from '../../hooks/usePageTitle';
 import {
   getAllUsers,
   addUser,
@@ -47,7 +48,7 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
+  usePageTitle('User Management');
   const [form, setForm] = useState<NewUserData>({
     name: '',
     email: '',

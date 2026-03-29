@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/auth/Login';
-import ResetPassword from './components/auth/ResetPassword';
 import DashboardLayout from './components/layout/DashboardLayout';
 import ManagingPartnerDashboard from './components/dashboards/ManagingPartnerDashboard';
 import AssociateDashboard from './components/dashboards/AssociateDashboard';
@@ -71,7 +70,6 @@ function App() {
       <Routes>
         {/* Public */}
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={handleLogin} />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Protected */}
         <Route
@@ -94,13 +92,11 @@ function App() {
                     }
                   />
 
-                  {/* ✅ Cases (Option 2: associates can view only their assigned cases; backend enforces) */}
+                  {/* Cases */}
                   <Route path="/cases" element={<CaseList userRole={user.role} />} />
                   <Route path="/cases/:id/*" element={<CaseWorkspace userRole={user.role} />} />
 
-                  {/* ✅ Create case should be MD/Exec only (frontend UX gating) */}
                   {(isMD || isExec) && <Route path="/cases/new" element={<CreateCase />} />}
-                  {/* If associate tries /cases/new, redirect */}
                   {user.role === 'associate' && (
                     <Route path="/cases/new" element={<Navigate to="/cases" replace />} />
                   )}

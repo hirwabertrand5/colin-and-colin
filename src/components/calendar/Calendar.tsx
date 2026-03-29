@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Search, Pencil, Trash2 } from 'lucide-react';
 import { UserRole } from '../../App';
+import usePageTitle from '../../hooks/usePageTitle';
 import {
   addEventToCase,
   deleteEvent,
@@ -51,14 +52,14 @@ export default function Calendar({ userRole }: CalendarProps) {
   const [currentView, setCurrentView] = useState<'month' | 'week'>('month');
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-
+  const [typeFilter, setTypeFilter] = useState<string>('all'); 
+  
   const [events, setEvents] = useState<FirmCalendarEvent[]>([]);
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
   const [cases, setCases] = useState<CaseData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
+  usePageTitle('Calendar');
   // Add Event modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [newEvent, setNewEvent] = useState<{ caseId: string; title: string; type: EventType; date: string; time: string; description: string; }>({

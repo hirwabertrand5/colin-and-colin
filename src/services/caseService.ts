@@ -1,15 +1,33 @@
-const API_URL =
-  import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5000/api';
+
+export type CaseType = 'Transactional Cases' | 'Litigation Cases' | 'Labor Cases';
+
+export type ClientContact = {
+  name?: string;
+  email?: string;
+  phone?: string;
+  isPrimary?: boolean;
+};
 
 export interface CaseData {
   _id?: string;
   caseNo: string;
   parties: string;
-  caseType: string;
+  caseType: CaseType;
   status: string;
   priority: string;
   assignedTo: string;
   description?: string;
+
+  clientContacts?: ClientContact[];
+  reporting?: {
+    weeklyEnabled?: boolean;
+    monthlyEnabled?: boolean;
+    onUpdateEnabled?: boolean;
+    lastGeneratedAt?: string;
+    lastSentAt?: string;
+  };
+
   workflow?: string;
   estimatedDuration?: string;
   budget?: string;
@@ -62,6 +80,9 @@ export const updateCase = async (caseId: string, updates: Partial<CaseData>): Pr
 };
 
 export const getActiveCasesCount = async () => {
-  const res = await fetch('/api/cases/stats/active', { headers: { Authorization: `Bearer ${getToken()}` } });
+  const res = await fetch(`${API_URL}/cases/stats/active`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) throw new Error((await res.json()).message || 'Failed to load active cases count');
   return res.json();
 };

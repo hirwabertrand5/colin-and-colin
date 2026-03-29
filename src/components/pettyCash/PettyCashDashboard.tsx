@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import usePageTitle from '../../hooks/usePageTitle';
 import {
   Plus,
   Trash2,
@@ -31,7 +32,7 @@ export default function PettyCashDashboard() {
   const [expenses, setExpenses] = useState<PettyCashExpense[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
+  usePageTitle('Petty Cash');
   // Create fund modal
   const [showCreateFund, setShowCreateFund] = useState(false);
   const [fundForm, setFundForm] = useState({ name: '', description: '', initialAmount: '' });

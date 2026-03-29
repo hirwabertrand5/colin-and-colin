@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import CaseClientReportsTab from '../reports/CaseClientReportsTab';
 import {
   FileText,
   Upload,
@@ -28,9 +29,27 @@ import {
   approveTask,
   rejectTask,
 } from '../../services/taskService';
-import { getEventsForCase, addEventToCase, updateEvent, deleteEvent, CaseEvent } from '../../services/eventService';
-import { getDocumentsForCase, addDocumentToCase, deleteDocument, CaseDocument } from '../../services/documentService';
-import { getInvoicesForCase, addInvoiceToCase, uploadProof, uploadInvoiceFile, deleteInvoice, Invoice } from '../../services/invoiceService';
+import {
+  getEventsForCase,
+  addEventToCase,
+  updateEvent,
+  deleteEvent,
+  CaseEvent,
+} from '../../services/eventService';
+import {
+  getDocumentsForCase,
+  addDocumentToCase,
+  deleteDocument,
+  CaseDocument,
+} from '../../services/documentService';
+import {
+  getInvoicesForCase,
+  addInvoiceToCase,
+  uploadProof,
+  uploadInvoiceFile,
+  deleteInvoice,
+  Invoice,
+} from '../../services/invoiceService';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5000/api';
@@ -45,8 +64,10 @@ type NewDocForm = {
 
 const eventTypes = ['Deadline', 'Court', 'Meeting', 'Other'];
 
+
 const STAGE_ORDER = [
   'On Boarding',
+  'Under Submission',
   'Pre trial',
   'Mediation',
   'Hearing',
@@ -91,9 +112,9 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   const [error, setError] = useState('');
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'calendar' | 'documents' | 'billing' | 'audit'>(
-    'overview'
-  );
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'tasks' | 'calendar' | 'documents' | 'billing' | 'audit' | 'reports'
+  >('overview');
 
   // Staff list
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
@@ -597,7 +618,8 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
 
   const totalBilled = useMemo(() => parseBudgetToNumber(caseData?.budget), [caseData?.budget]);
   const totalPaid = useMemo(
-    () => invoices.filter((i) => i.status === 'Paid').reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
+    () =>
+      invoices.filter((i) => i.status === 'Paid').reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
     [invoices]
   );
   const outstanding = useMemo(() => Math.max(0, totalBilled - totalPaid), [totalBilled, totalPaid]);
@@ -716,6 +738,10 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
             { id: 'documents', label: 'Documents', icon: Upload },
             // ✅ Billing hidden for associates
             ...(canManageBilling ? [{ id: 'billing', label: 'Billing', icon: DollarSign }] : []),
+
+            // ✅ NEW: Client Reports (MD/Exec only)
+            ...(canManageCase ? [{ id: 'reports', label: 'Client Reports', icon: FileText }] : []),
+
             { id: 'audit', label: 'Audit Log', icon: Clock },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -911,6 +937,11 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
             </div>
           )}
         </div>
+      )}
+
+      {/* ✅ Client Reports (MD/Exec only) */}
+      {activeTab === 'reports' && canManageCase && (
+        <CaseClientReportsTab caseData={caseData} canManage={canManageCase} />
       )}
 
       {/* ✅ Add Task Modal (only for MD/Exec) */}
@@ -1225,7 +1256,9 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                         <CalendarIcon className="w-4 h-4 mr-1" />
                         {event.date} at {event.time}
                       </div>
-                      {event.description && <div className="text-sm text-gray-500 mt-1">{event.description}</div>}
+                      {event.description && (
+                        <div className="text-sm text-gray-500 mt-1">{event.description}</div>
+                      )}
                     </div>
 
                     <div className="flex gap-2 mt-2 md:mt-0">
@@ -1291,7 +1324,9 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
           </div>
 
           {docsError && (
-            <div className="px-6 py-3 text-sm text-red-700 bg-red-50 border-b border-red-100">{docsError}</div>
+            <div className="px-6 py-3 text-sm text-red-700 bg-red-50 border-b border-red-100">
+              {docsError}
+            </div>
           )}
 
           {docsLoading ? (
@@ -1392,7 +1427,10 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                     >
                       Cancel
                     </button>
-                    <button type="submit" className="flex-1 px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700">
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700"
+                    >
                       Upload
                     </button>
                   </div>
@@ -1404,266 +1442,270 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
       )}
 
       {/* Billing */}
-  {activeTab === 'billing' && (
-    <div className="space-y-6">
-      {/* Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <span className="text-gray-500 text-sm mb-2 block">Total Billed (Budget)</span>
-          <span className="text-3xl font-bold text-gray-900">{formatRwf(totalBilled)}</span>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <span className="text-gray-500 text-sm mb-2 block">Total Paid</span>
-          <span className="text-3xl font-bold text-green-600">{formatRwf(totalPaid)}</span>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <span className="text-gray-500 text-sm mb-2 block">Outstanding</span>
-          <span className="text-3xl font-bold text-yellow-600">{formatRwf(outstanding)}</span>
-        </div>
-      </div>
-
-      {/* Invoice list */}
-      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-        <div className="px-6 py-5 border-b flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              Invoices <span className="text-gray-500 font-medium">({invoices.length})</span>
-            </h3>
-            <p className="text-sm text-gray-500">Invoices linked to this case only</p>
+      {activeTab === 'billing' && (
+        <div className="space-y-6">
+          {/* Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white border border-gray-200 rounded-xl p-6">
+              <span className="text-gray-500 text-sm mb-2 block">Total Billed (Budget)</span>
+              <span className="text-3xl font-bold text-gray-900">{formatRwf(totalBilled)}</span>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl p-6">
+              <span className="text-gray-500 text-sm mb-2 block">Total Paid</span>
+              <span className="text-3xl font-bold text-green-600">{formatRwf(totalPaid)}</span>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl p-6">
+              <span className="text-gray-500 text-sm mb-2 block">Outstanding</span>
+              <span className="text-3xl font-bold text-yellow-600">{formatRwf(outstanding)}</span>
+            </div>
           </div>
 
-          <button
-            onClick={() => setShowAddInvoiceModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
-          >
-            <Plus className="w-4 h-4" />
-            New Invoice
-          </button>
-        </div>
+          {/* Invoice list */}
+          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+            <div className="px-6 py-5 border-b flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Invoices <span className="text-gray-500 font-medium">({invoices.length})</span>
+                </h3>
+                <p className="text-sm text-gray-500">Invoices linked to this case only</p>
+              </div>
 
-        {invoicesError && <div className="px-6 py-3 text-sm text-red-700 bg-red-50 border-b">{invoicesError}</div>}
+              <button
+                onClick={() => setShowAddInvoiceModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+              >
+                <Plus className="w-4 h-4" />
+                New Invoice
+              </button>
+            </div>
 
-        {invoicesLoading ? (
-          <div className="px-6 py-10 text-gray-500">Loading invoices...</div>
-        ) : invoices.length === 0 ? (
-          <div className="px-6 py-10 text-gray-500">No invoices yet for this case.</div>
-        ) : (
-          <div className="divide-y">
-            {invoices.map((inv, index) => (
-              <div key={inv._id} className="px-6 py-5 flex items-center justify-between gap-4">
-                {/* Left */}
-                <div className="flex items-start gap-4 min-w-0">
-                  {/* numbering */}
-                  <div className="w-7 text-sm text-gray-400 font-medium pt-0.5">{index + 1}.</div>
+            {invoicesError && (
+              <div className="px-6 py-3 text-sm text-red-700 bg-red-50 border-b">{invoicesError}</div>
+            )}
 
-                  <Receipt className="w-5 h-5 text-gray-600 mt-1 shrink-0" />
+            {invoicesLoading ? (
+              <div className="px-6 py-10 text-gray-500">Loading invoices...</div>
+            ) : invoices.length === 0 ? (
+              <div className="px-6 py-10 text-gray-500">No invoices yet for this case.</div>
+            ) : (
+              <div className="divide-y">
+                {invoices.map((inv, index) => (
+                  <div key={inv._id} className="px-6 py-5 flex items-center justify-between gap-4">
+                    {/* Left */}
+                    <div className="flex items-start gap-4 min-w-0">
+                      {/* numbering */}
+                      <div className="w-7 text-sm text-gray-400 font-medium pt-0.5">{index + 1}.</div>
 
-                  <div className="min-w-0">
-                    <div className="font-semibold text-gray-900">{inv.invoiceNo}</div>
-                    <div className="text-sm text-gray-500">Date: {inv.date}</div>
-                    {inv.notes ? <div className="text-sm text-gray-500 mt-1">{inv.notes}</div> : null}
+                      <Receipt className="w-5 h-5 text-gray-600 mt-1 shrink-0" />
 
-                    {/* Invoice file link */}
-                    <div className="mt-2 text-sm">
-                      {inv.invoiceFileUrl ? (
-                        <a
-                          href={BACKEND_URL + inv.invoiceFileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 underline font-medium"
-                        >
-                          View Invoice File
-                        </a>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900">{inv.invoiceNo}</div>
+                        <div className="text-sm text-gray-500">Date: {inv.date}</div>
+                        {inv.notes ? <div className="text-sm text-gray-500 mt-1">{inv.notes}</div> : null}
+
+                        {/* Invoice file link */}
+                        <div className="mt-2 text-sm">
+                          {inv.invoiceFileUrl ? (
+                            <a
+                              href={BACKEND_URL + inv.invoiceFileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 underline font-medium"
+                            >
+                              View Invoice File
+                            </a>
+                          ) : (
+                            <span className="text-gray-400">No invoice file</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right */}
+                    <div className="flex items-center gap-4 shrink-0">
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-gray-900">{formatRwf(Number(inv.amount) || 0)}</div>
+                      </div>
+
+                      <span className={`px-3 py-1 rounded text-xs font-semibold ${getInvoiceStatusChip(inv.status)}`}>
+                        {inv.status}
+                      </span>
+
+                      {/* Proof */}
+                      {inv.status === 'Paid' ? (
+                        inv.proofUrl ? (
+                          <a
+                            href={BACKEND_URL + inv.proofUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 underline text-xs font-medium"
+                          >
+                            View Proof
+                          </a>
+                        ) : (
+                          <span className="text-xs text-gray-400">No proof</span>
+                        )
                       ) : (
-                        <span className="text-gray-400">No invoice file</span>
+                        <button
+                          className="px-3 py-1 rounded bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200"
+                          onClick={() => openUploadProofModal(inv._id!)}
+                        >
+                          Upload Proof
+                        </button>
                       )}
+
+                      {/* Upload invoice file (if missing) */}
+                      {!inv.invoiceFileUrl && (
+                        <button
+                          className="px-3 py-1 rounded bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200"
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.onchange = async () => {
+                              const file = input.files?.[0];
+                              if (!file) return;
+                              try {
+                                setInvoicesError('');
+                                await uploadInvoiceFile(inv._id!, file);
+                                reloadInvoices();
+                              } catch (err: any) {
+                                setInvoicesError(err.message || 'Failed to upload invoice file');
+                              }
+                            };
+                            input.click();
+                          }}
+                        >
+                          Upload Invoice File
+                        </button>
+                      )}
+
+                      {/* Delete */}
+                      <button
+                        className="p-2 text-red-700 hover:bg-red-50 rounded"
+                        title="Delete invoice"
+                        onClick={() => handleDeleteInvoice(inv._id!)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-                {/* Right */}
-                <div className="flex items-center gap-4 shrink-0">
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-gray-900">{formatRwf(Number(inv.amount) || 0)}</div>
+          {/* Add Invoice Modal */}
+          {showAddInvoiceModal && (
+            <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg max-w-md w-full p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Create Invoice</h3>
+
+                <form onSubmit={handleAddInvoice} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                      <input
+                        type="date"
+                        value={newInvoice.date}
+                        onChange={(e) => setNewInvoice((p) => ({ ...p, date: e.target.value }))}
+                        required
+                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Amount (RWF) *</label>
+                      <input
+                        inputMode="numeric"
+                        value={newInvoice.amount}
+                        onChange={(e) => setNewInvoice((p) => ({ ...p, amount: e.target.value }))}
+                        required
+                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                        placeholder="100000"
+                      />
+                    </div>
                   </div>
 
-                  <span className={`px-3 py-1 rounded text-xs font-semibold ${getInvoiceStatusChip(inv.status)}`}>
-                    {inv.status}
-                  </span>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <textarea
+                      value={newInvoice.notes}
+                      onChange={(e) => setNewInvoice((p) => ({ ...p, notes: e.target.value }))}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-gray-300 rounded"
+                    />
+                  </div>
 
-                  {/* Proof */}
-                  {inv.status === 'Paid' ? (
-                    inv.proofUrl ? (
-                      <a
-                        href={BACKEND_URL + inv.proofUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 underline text-xs font-medium"
-                      >
-                        View Proof
-                      </a>
-                    ) : (
-                      <span className="text-xs text-gray-400">No proof</span>
-                    )
-                  ) : (
-                    <button
-                      className="px-3 py-1 rounded bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200"
-                      onClick={() => openUploadProofModal(inv._id!)}
-                    >
-                      Upload Proof
-                    </button>
-                  )}
+                  {/* optional invoice file */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Invoice File (optional)</label>
+                    <input type="file" onChange={(e) => setNewInvoiceFile(e.target.files?.[0] || null)} className="w-full" />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Upload the invoice PDF/scan. Proof of payment is uploaded separately.
+                    </p>
+                  </div>
 
-                  {/* Upload invoice file (if missing) */}
-                  {!inv.invoiceFileUrl && (
+                  <div className="flex gap-3 mt-6">
                     <button
-                      className="px-3 py-1 rounded bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200"
+                      type="button"
                       onClick={() => {
-                        const input = document.createElement('input');
-                        input.type = 'file';
-                        input.onchange = async () => {
-                          const file = input.files?.[0];
-                          if (!file) return;
-                          try {
-                            setInvoicesError('');
-                            await uploadInvoiceFile(inv._id!, file);
-                            reloadInvoices();
-                          } catch (err: any) {
-                            setInvoicesError(err.message || 'Failed to upload invoice file');
-                          }
-                        };
-                        input.click();
+                        setShowAddInvoiceModal(false);
+                        setNewInvoiceFile(null);
                       }}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
                     >
-                      Upload Invoice File
+                      Cancel
                     </button>
-                  )}
-
-                  {/* Delete */}
-                  <button
-                    className="p-2 text-red-700 hover:bg-red-50 rounded"
-                    title="Delete invoice"
-                    onClick={() => handleDeleteInvoice(inv._id!)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                    <button type="submit" className="flex-1 px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800">
+                      Create Invoice
+                    </button>
+                  </div>
+                </form>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
+          )}
 
-      {/* Add Invoice Modal */}
-      {showAddInvoiceModal && (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Create Invoice</h3>
+          {/* Upload Proof Modal */}
+          {showUploadProofModal && (
+            <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg max-w-md w-full p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Proof of Payment</h3>
 
-            <form onSubmit={handleAddInvoice} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                <form onSubmit={handleUploadProof} className="space-y-4">
                   <input
-                    type="date"
-                    value={newInvoice.date}
-                    onChange={(e) => setNewInvoice((p) => ({ ...p, date: e.target.value }))}
+                    type="file"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded"
+                    onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                    className="w-full"
                   />
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount (RWF) *</label>
-                  <input
-                    inputMode="numeric"
-                    value={newInvoice.amount}
-                    onChange={(e) => setNewInvoice((p) => ({ ...p, amount: e.target.value }))}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded"
-                    placeholder="100000"
-                  />
-                </div>
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUploadProofModal(false);
+                        setProofInvoiceId(null);
+                        setProofFile(null);
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={uploadingProof}
+                      className="flex-1 px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-60"
+                    >
+                      {uploadingProof ? 'Uploading...' : 'Upload'}
+                    </button>
+                  </div>
+                </form>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  value={newInvoice.notes}
-                  onChange={(e) => setNewInvoice((p) => ({ ...p, notes: e.target.value }))}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
-
-              {/* optional invoice file */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice File (optional)</label>
-                <input
-                  type="file"
-                  onChange={(e) => setNewInvoiceFile(e.target.files?.[0] || null)}
-                  className="w-full"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Upload the invoice PDF/scan. Proof of payment is uploaded separately.
-                </p>
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddInvoiceModal(false);
-                    setNewInvoiceFile(null);
-                  }}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="flex-1 px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800">
-                  Create Invoice
-                </button>
-              </div>
-            </form>
-          </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Upload Proof Modal */}
-      {showUploadProofModal && (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Proof of Payment</h3>
-
-            <form onSubmit={handleUploadProof} className="space-y-4">
-              <input type="file" required onChange={(e) => setProofFile(e.target.files?.[0] || null)} className="w-full" />
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowUploadProofModal(false);
-                    setProofInvoiceId(null);
-                    setProofFile(null);
-                  }}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={uploadingProof}
-                  className="flex-1 px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-60"
-                >
-                  {uploadingProof ? 'Uploading...' : 'Upload'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  )}
       {/* Audit */}
       {activeTab === 'audit' && (
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
