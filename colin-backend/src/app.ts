@@ -2,7 +2,7 @@ import cors from 'cors';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import path from 'path';
-
+import firmReportsRoutes from './routes/firmReports';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user.js';
 import caseRoutes from './routes/case.js';
@@ -71,7 +71,7 @@ app.use('/api', auditFeedRoutes);
 app.use('/api', calendarRoutes);
 app.use('/api', billingRoutes);
 app.use('/api', performanceRoutes);
-
+app.use('/api', firmReportsRoutes);
 app.use('/api/petty-cash', pettyCashRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/time-logs', timeLogRoutes);

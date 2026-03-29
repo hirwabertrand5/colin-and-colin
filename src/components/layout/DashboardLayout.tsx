@@ -62,7 +62,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
   const adminNavigation: NavItem[] = [
     { name: 'Users', href: '/admin/users', icon: Users, roles: ['managing_director', 'executive_assistant'] },
     { name: 'Petty Cash', href: '/petty-cash', icon: Wallet, roles: ['managing_director', 'executive_assistant'] },
-    { name: 'Workflows', href: '/admin/workflows', icon: Workflow, roles: ['managing_director'] },
+    
     { name: 'Settings', href: '/admin/settings', icon: Settings, roles: ['managing_director'] },
   ];
 

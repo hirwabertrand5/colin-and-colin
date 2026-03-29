@@ -75,6 +75,7 @@ const STAGE_ORDER = [
   'Pronouncement',
   'Cope of Judgement',
   'Execution',
+  'Closed',
 ];
 
 interface CaseWorkspaceProps {
