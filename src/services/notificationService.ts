@@ -70,3 +70,15 @@ export const markNotificationRead = async (id: string): Promise<AppNotification>
   if (!res.ok) throw new Error((await res.json()).message || 'Failed to mark as read');
   return res.json();
 };
+
+export const getUnreadNotificationCount = async (): Promise<number> => {
+  const res = await fetch(`${API_URL}/notifications/unread-count`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  handleAuth(res);
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.message || 'Failed to fetch unread count');
+
+  return Number(data?.unread || 0);
+};

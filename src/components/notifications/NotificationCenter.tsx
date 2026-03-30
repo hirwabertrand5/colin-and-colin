@@ -8,6 +8,7 @@ import {
   Settings as SettingsIcon,
   CheckSquare,
   ClipboardCheck,
+  Clock,
 } from 'lucide-react';
 
 import {
@@ -46,6 +47,11 @@ const iconForType = (type: string) => {
     case 'TASK_APPROVAL_REQUESTED':
       return ClipboardCheck;
 
+    case 'TASK_DUE_REMINDER':
+      return Clock;
+    case 'EVENT_REMINDER':
+      return Clock;
+
     default:
       return SettingsIcon;
   }
@@ -54,8 +60,13 @@ const iconForType = (type: string) => {
 const priorityForType = (type: string, severity?: string) => {
   if (severity === 'critical') return 'high';
   if (severity === 'warning') return 'high';
+
   if (type === 'PETTY_CASH_LOW') return 'high';
   if (type === 'TASK_APPROVAL_REQUESTED') return 'high';
+
+  if (type === 'EVENT_REMINDER') return 'high';
+  if (type === 'TASK_DUE_REMINDER') return 'medium';
+
   return 'low';
 };
 
@@ -126,9 +137,9 @@ export default function NotificationCenter() {
       case 'high':
         return 'text-red-600 bg-red-100';
       case 'medium':
-        return 'text-yellow-600 bg-yellow-100';
+        return 'text-yellow-700 bg-yellow-100';
       case 'low':
-        return 'text-blue-600 bg-blue-100';
+        return 'text-blue-700 bg-blue-100';
       default:
         return 'text-gray-600 bg-gray-100';
     }
@@ -158,6 +169,7 @@ export default function NotificationCenter() {
       if (n.taskId) navigate(`/tasks/${n.taskId}`);
       else if (n.caseId) navigate(`/cases/${n.caseId}`);
       else if (n.fundId) navigate(`/petty-cash`);
+      else navigate('/'); // final fallback
     } catch (e: any) {
       setError(e?.message || 'Failed to open notification');
     }
@@ -202,9 +214,15 @@ export default function NotificationCenter() {
             { id: 'all', label: 'All' },
             { id: 'unread', label: `Unread ${unreadCount > 0 ? `(${unreadCount})` : ''}` },
 
+            // Tasks
             { id: 'TASK_ASSIGNED', label: 'Task Assigned' },
             { id: 'TASK_APPROVAL_REQUESTED', label: 'Approval Requests' },
+            { id: 'TASK_DUE_REMINDER', label: 'Task Due Reminders' },
 
+            // Events
+            { id: 'EVENT_REMINDER', label: 'Event Reminders' },
+
+            // Petty cash
             { id: 'PETTY_CASH_LOW', label: 'Petty Cash Low' },
             { id: 'PETTY_CASH_CREATED', label: 'Petty Cash Created' },
             { id: 'PETTY_CASH_EXPENSE', label: 'Petty Cash Expenses' },
@@ -271,7 +289,10 @@ export default function NotificationCenter() {
 
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-gray-500">{time}</p>
-                      <button onClick={() => handleOpen(n)} className="text-xs text-gray-600 hover:text-gray-900">
+                      <button
+                        onClick={() => handleOpen(n)}
+                        className="text-xs text-gray-600 hover:text-gray-900"
+                      >
                         Open →
                       </button>
                     </div>
@@ -293,7 +314,9 @@ export default function NotificationCenter() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 mb-1">Notification Preferences</h2>
-            <p className="text-sm text-gray-500">Control which events send emails and reminders for your account.</p>
+            <p className="text-sm text-gray-500">
+              Control which events send emails and reminders for your account.
+            </p>
           </div>
 
           <button

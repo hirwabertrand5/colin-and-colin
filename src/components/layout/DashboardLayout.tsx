@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -14,12 +14,12 @@ import {
   X,
   LogOut,
   Users,
-  Workflow,
   Wallet,
 } from 'lucide-react';
 import { User } from '../../App';
 
 import companyLogo from '../../assets/logo-colin.png';
+import { getUnreadNotificationCount } from '../../services/notificationService';
 
 interface DashboardLayoutProps {
   user: User;
@@ -36,24 +36,19 @@ type NavItem = {
 
 export default function DashboardLayout({ user, onLogout, children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notificationCount] = useState(5);
+  const [notificationCount, setNotificationCount] = useState(0);
   const location = useLocation();
 
-  // ✅ Option 2: Associates can access Cases (but backend filters to assigned cases)
   const navigation: NavItem[] = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-
-    // ✅ visible for MD + Exec + Associate
     {
       name: 'Cases',
       href: '/cases',
       icon: Briefcase,
       roles: ['managing_director', 'executive_assistant', 'associate'],
     },
-
     { name: 'Tasks', href: '/tasks', icon: CheckSquare },
     { name: 'Calendar', href: '/calendar', icon: CalendarIcon },
-
     { name: 'Billing', href: '/billing', icon: DollarSign, roles: ['managing_director', 'executive_assistant'] },
     { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['managing_director'] },
     { name: 'Performance', href: '/performance', icon: BarChart3, roles: ['associate'] },
@@ -62,7 +57,6 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
   const adminNavigation: NavItem[] = [
     { name: 'Users', href: '/admin/users', icon: Users, roles: ['managing_director', 'executive_assistant'] },
     { name: 'Petty Cash', href: '/petty-cash', icon: Wallet, roles: ['managing_director', 'executive_assistant'] },
-    
     { name: 'Settings', href: '/admin/settings', icon: Settings, roles: ['managing_director'] },
   ];
 
@@ -72,8 +66,30 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
   };
 
   const hasAccess = (item: { roles?: string[] }) => !item.roles || item.roles.includes(user.role);
-
   const adminItems = adminNavigation.filter(hasAccess);
+
+  const refreshUnreadCount = async () => {
+    try {
+      const n = await getUnreadNotificationCount();
+      setNotificationCount(n);
+    } catch {
+      // do nothing (avoid breaking UI)
+    }
+  };
+
+  // Load once + poll every 30s
+  useEffect(() => {
+    refreshUnreadCount();
+    const t = window.setInterval(refreshUnreadCount, 30000);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refresh on route change (useful after marking notifications read)
+  useEffect(() => {
+    refreshUnreadCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -96,11 +112,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-center h-24 px-6 border-b border-gray-200">
-            <img
-              src={companyLogo}
-              alt="Colin & Colin Logo"
-              className="max-w-[165px] w-full object-contain"
-            />
+            <img src={companyLogo} alt="Colin & Colin Logo" className="max-w-[165px] w-full object-contain" />
           </div>
 
           {/* Navigation */}
@@ -186,9 +198,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
               </div>
               <div className="ml-3 flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{user.name}</p>
-                <p className="text-xs text-gray-500 truncate capitalize">
-                  {user.role.replace('_', ' ')}
-                </p>
+                <p className="text-xs text-gray-500 truncate capitalize">{user.role.replace('_', ' ')}</p>
               </div>
             </div>
 
@@ -221,7 +231,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
               <Bell className="w-6 h-6" />
               {notificationCount > 0 && (
                 <span className="absolute top-0 right-0 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                  {notificationCount}
+                  {notificationCount > 99 ? '99+' : notificationCount}
                 </span>
               )}
             </Link>
