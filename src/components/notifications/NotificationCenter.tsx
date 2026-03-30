@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Bell,
-  CheckCircle,
   AlertTriangle,
   DollarSign,
   FileText,
-  Settings,
+  Settings as SettingsIcon,
+  CheckSquare,
+  ClipboardCheck,
 } from 'lucide-react';
 
 import {
@@ -14,6 +16,12 @@ import {
   markNotificationRead,
   AppNotification,
 } from '../../services/notificationService';
+
+import {
+  getMyNotificationPreferences,
+  updateMyNotificationPreferences,
+  NotificationPreferences,
+} from '../../services/notificationPreferencesService';
 
 const getUserId = () => {
   try {
@@ -32,8 +40,14 @@ const iconForType = (type: string) => {
       return DollarSign;
     case 'PETTY_CASH_EXPENSE':
       return FileText;
+
+    case 'TASK_ASSIGNED':
+      return CheckSquare;
+    case 'TASK_APPROVAL_REQUESTED':
+      return ClipboardCheck;
+
     default:
-      return Settings;
+      return SettingsIcon;
   }
 };
 
@@ -41,35 +55,63 @@ const priorityForType = (type: string, severity?: string) => {
   if (severity === 'critical') return 'high';
   if (severity === 'warning') return 'high';
   if (type === 'PETTY_CASH_LOW') return 'high';
+  if (type === 'TASK_APPROVAL_REQUESTED') return 'high';
   return 'low';
 };
 
 export default function NotificationCenter() {
+  const navigate = useNavigate();
+
   const [filter, setFilter] = useState<string>('all');
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Preferences
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [prefsLoading, setPrefsLoading] = useState(false);
+  const [prefsSaving, setPrefsSaving] = useState(false);
+  const [prefsError, setPrefsError] = useState('');
+  const [prefsSaved, setPrefsSaved] = useState('');
+
   const userId = getUserId();
 
-  const load = async (f = filter) => {
+  const loadNotifications = async (f = filter) => {
     try {
       setLoading(true);
       setError('');
       const data = await listNotifications(f);
       setItems(data);
     } catch (e: any) {
-      setError(e.message || 'Failed to load notifications');
+      setError(e?.message || 'Failed to load notifications');
       setItems([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const loadPrefs = async () => {
+    try {
+      setPrefsLoading(true);
+      setPrefsError('');
+      const p = await getMyNotificationPreferences();
+      setPrefs(p);
+    } catch (e: any) {
+      setPrefsError(e?.message || 'Failed to load preferences');
+      setPrefs(null);
+    } finally {
+      setPrefsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    load(filter);
+    loadNotifications(filter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
+
+  useEffect(() => {
+    loadPrefs();
+  }, []);
 
   const isRead = (n: AppNotification) => {
     if (!userId) return false;
@@ -95,21 +137,46 @@ export default function NotificationCenter() {
   const handleMarkAll = async () => {
     try {
       await markAllNotificationsRead();
-      await load(filter);
+      await loadNotifications(filter);
     } catch (e: any) {
-      setError(e.message || 'Failed to mark all as read');
+      setError(e?.message || 'Failed to mark all as read');
     }
   };
 
   const handleOpen = async (n: AppNotification) => {
-    // mark as read then navigate later (when we add petty cash UI)
     try {
       await markNotificationRead(n._id);
-      await load(filter);
-      // future: navigate to petty cash page if n.fundId exists
-      // e.g. navigate(`/petty-cash`)
+      await loadNotifications(filter);
+
+      // ✅ navigate to link if provided
+      if (n.link) {
+        navigate(n.link);
+        return;
+      }
+
+      // fallback routing
+      if (n.taskId) navigate(`/tasks/${n.taskId}`);
+      else if (n.caseId) navigate(`/cases/${n.caseId}`);
+      else if (n.fundId) navigate(`/petty-cash`);
     } catch (e: any) {
-      setError(e.message || 'Failed to mark as read');
+      setError(e?.message || 'Failed to open notification');
+    }
+  };
+
+  const savePrefs = async () => {
+    if (!prefs) return;
+    try {
+      setPrefsSaving(true);
+      setPrefsError('');
+      setPrefsSaved('');
+      const saved = await updateMyNotificationPreferences(prefs);
+      setPrefs(saved);
+      setPrefsSaved('Saved.');
+      window.setTimeout(() => setPrefsSaved(''), 2000);
+    } catch (e: any) {
+      setPrefsError(e?.message || 'Failed to save preferences');
+    } finally {
+      setPrefsSaving(false);
     }
   };
 
@@ -135,7 +202,9 @@ export default function NotificationCenter() {
             { id: 'all', label: 'All' },
             { id: 'unread', label: `Unread ${unreadCount > 0 ? `(${unreadCount})` : ''}` },
 
-            // Petty cash filters (backend types)
+            { id: 'TASK_ASSIGNED', label: 'Task Assigned' },
+            { id: 'TASK_APPROVAL_REQUESTED', label: 'Approval Requests' },
+
             { id: 'PETTY_CASH_LOW', label: 'Petty Cash Low' },
             { id: 'PETTY_CASH_CREATED', label: 'Petty Cash Created' },
             { id: 'PETTY_CASH_EXPENSE', label: 'Petty Cash Expenses' },
@@ -171,7 +240,6 @@ export default function NotificationCenter() {
             const Icon = iconForType(n.type);
             const read = isRead(n);
             const priority = priorityForType(n.type, n.severity);
-
             const time = new Date(n.createdAt).toLocaleString();
 
             return (
@@ -203,10 +271,7 @@ export default function NotificationCenter() {
 
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-gray-500">{time}</p>
-                      <button
-                        onClick={() => handleOpen(n)}
-                        className="text-xs text-gray-600 hover:text-gray-900"
-                      >
+                      <button onClick={() => handleOpen(n)} className="text-xs text-gray-600 hover:text-gray-900">
                         Open →
                       </button>
                     </div>
@@ -223,12 +288,160 @@ export default function NotificationCenter() {
         )}
       </div>
 
-      {/* Preferences (still UI-only) */}
+      {/* Preferences (dynamic) */}
       <div className="mt-6 bg-white border border-gray-200 rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Notification Preferences</h2>
-        <p className="text-sm text-gray-500">
-          Preferences saving will be implemented after petty cash UI is completed.
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Notification Preferences</h2>
+            <p className="text-sm text-gray-500">Control which events send emails and reminders for your account.</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={savePrefs}
+            disabled={!prefs || prefsSaving}
+            className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-60"
+          >
+            {prefsSaving ? 'Saving…' : 'Save Preferences'}
+          </button>
+        </div>
+
+        {prefsError && (
+          <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+            {prefsError}
+          </div>
+        )}
+        {prefsSaved && (
+          <div className="mt-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded text-sm">
+            {prefsSaved}
+          </div>
+        )}
+
+        {prefsLoading ? (
+          <div className="mt-4 text-sm text-gray-500">Loading preferences…</div>
+        ) : !prefs ? (
+          <div className="mt-4 text-sm text-gray-500">No preferences available.</div>
+        ) : (
+          <div className="mt-5 space-y-4">
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 w-4 h-4 rounded border-gray-300"
+                checked={prefs.emailEnabled}
+                onChange={(e) => setPrefs((p) => (p ? { ...p, emailEnabled: e.target.checked } : p))}
+              />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Enable email notifications</p>
+                <p className="text-xs text-gray-500">Master switch for all email sending.</p>
+              </div>
+            </label>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="flex items-start gap-3 border border-gray-200 rounded-lg p-4">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300"
+                  checked={prefs.deadlinesEnabled}
+                  onChange={(e) => setPrefs((p) => (p ? { ...p, deadlinesEnabled: e.target.checked } : p))}
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Deadline Reminders</p>
+                  <p className="text-xs text-gray-500">Tasks due & hearing reminders.</p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 border border-gray-200 rounded-lg p-4">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300"
+                  checked={prefs.taskAssignmentsEnabled}
+                  onChange={(e) =>
+                    setPrefs((p) => (p ? { ...p, taskAssignmentsEnabled: e.target.checked } : p))
+                  }
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Task Assignments</p>
+                  <p className="text-xs text-gray-500">When a task is assigned to you.</p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 border border-gray-200 rounded-lg p-4">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300"
+                  checked={prefs.approvalsEnabled}
+                  onChange={(e) => setPrefs((p) => (p ? { ...p, approvalsEnabled: e.target.checked } : p))}
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Approvals</p>
+                  <p className="text-xs text-gray-500">Approval requested and decision updates.</p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 border border-gray-200 rounded-lg p-4">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300"
+                  checked={prefs.pettyCashLowEnabled}
+                  onChange={(e) => setPrefs((p) => (p ? { ...p, pettyCashLowEnabled: e.target.checked } : p))}
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Petty Cash Low</p>
+                  <p className="text-xs text-gray-500">Critical low fund alerts.</p>
+                </div>
+              </label>
+            </div>
+
+            <div className="border-t border-gray-200 pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Task due reminder (hours before due)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={168}
+                    value={prefs.taskDueReminderHours}
+                    onChange={(e) =>
+                      setPrefs((p) => (p ? { ...p, taskDueReminderHours: Number(e.target.value) } : p))
+                    }
+                    className="w-40 px-3 py-2 border border-gray-300 rounded"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Event reminders (hours before)
+                  </label>
+                  <input
+                    type="text"
+                    value={(prefs.eventReminderHours || []).join(',')}
+                    onChange={(e) => {
+                      const parts = e.target.value
+                        .split(',')
+                        .map((x) => x.trim())
+                        .filter(Boolean);
+
+                      const nums = parts
+                        .map((x) => Number(x))
+                        .filter((n) => Number.isFinite(n) && n > 0 && n <= 168);
+
+                      setPrefs((p) => (p ? { ...p, eventReminderHours: nums } : p));
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded"
+                    placeholder="24,2"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Example: 24,2 means 24h and 2h before.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-500">
+              These preferences control email sending. In-app notifications still appear in the center.
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

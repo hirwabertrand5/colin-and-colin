@@ -1,17 +1,16 @@
 import express from 'express';
-import { authenticate, authorize } from '../middleware/authMiddleware';
-import {
-  listMyNotifications,
-  markAllAsRead,
-  markOneAsRead,
-} from '../controllers/notificationController';
+import { authenticate } from '../middleware/authMiddleware';
+import { listMyNotifications, markAllAsRead, markOneAsRead } from '../controllers/notificationController';
+import { getMyNotificationPreferences, updateMyNotificationPreferences } from '../controllers/notificationPreferencesController';
 
 const router = express.Router();
 
-const ROLES = ['managing_director', 'executive_assistant'];
+router.get('/', authenticate, listMyNotifications);
+router.post('/read-all', authenticate, markAllAsRead);
+router.post('/:id/read', authenticate, markOneAsRead);
 
-router.get('/', authenticate, authorize(ROLES), listMyNotifications);
-router.post('/read-all', authenticate, authorize(ROLES), markAllAsRead);
-router.post('/:id/read', authenticate, authorize(ROLES), markOneAsRead);
+// preferences
+router.get('/preferences/me', authenticate, getMyNotificationPreferences);
+router.put('/preferences/me', authenticate, updateMyNotificationPreferences);
 
 export default router;

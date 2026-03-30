@@ -3,80 +3,69 @@ import mongoose from 'mongoose';
 import Notification from '../models/notificationModel';
 import { AuthRequest } from '../middleware/authMiddleware';
 
-const isRoleAllowed = (role?: string) =>
-  role === 'managing_director' || role === 'executive_assistant';
-
 export const listMyNotifications = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.user || !isRoleAllowed(req.user.role)) {
-      return res.status(403).json({ message: 'Forbidden.' });
-    }
+    if (!req.user?.id) return res.status(401).json({ message: 'Unauthorized.' });
 
     const { filter = 'all' } = req.query as any;
+    const me = new mongoose.Types.ObjectId(req.user.id);
 
     const q: any = {
-      audienceRoles: req.user.role, // role-based audience
+      $or: [{ audienceUserIds: me }, { audienceRoles: req.user.role }],
     };
 
-    // unread filter
     if (filter === 'unread') {
-      q.isReadBy = { $ne: new mongoose.Types.ObjectId(req.user.id) };
+      q.isReadBy = { $ne: me };
     }
 
-    // type filter: e.g. PETTY_CASH_LOW
     if (filter && filter !== 'all' && filter !== 'unread') {
       q.type = String(filter);
     }
 
-    const items = await Notification.find(q).sort({ createdAt: -1 }).limit(200);
-
+    const items = await Notification.find(q).sort({ createdAt: -1 }).limit(200).lean();
     res.json(items);
-  } catch {
-    res.status(500).json({ message: 'Failed to fetch notifications.' });
+  } catch (e: any) {
+    res.status(500).json({ message: e?.message || 'Failed to fetch notifications.' });
   }
 };
 
 export const markAllAsRead = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.user || !isRoleAllowed(req.user.role)) {
-      return res.status(403).json({ message: 'Forbidden.' });
-    }
+    if (!req.user?.id) return res.status(401).json({ message: 'Unauthorized.' });
 
-    const userId = new mongoose.Types.ObjectId(req.user.id);
+    const me = new mongoose.Types.ObjectId(req.user.id);
 
     await Notification.updateMany(
       {
-        audienceRoles: req.user.role,
-        isReadBy: { $ne: userId },
+        $or: [{ audienceUserIds: me }, { audienceRoles: req.user.role }],
+        isReadBy: { $ne: me },
       },
-      { $addToSet: { isReadBy: userId } }
+      { $addToSet: { isReadBy: me } }
     );
 
     res.json({ message: 'Marked all as read.' });
-  } catch {
-    res.status(500).json({ message: 'Failed to mark all as read.' });
+  } catch (e: any) {
+    res.status(500).json({ message: e?.message || 'Failed to mark all as read.' });
   }
 };
 
 export const markOneAsRead = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.user || !isRoleAllowed(req.user.role)) {
-      return res.status(403).json({ message: 'Forbidden.' });
-    }
+    if (!req.user?.id) return res.status(401).json({ message: 'Unauthorized.' });
 
     const { id } = req.params;
-    const userId = new mongoose.Types.ObjectId(req.user.id);
+    const me = new mongoose.Types.ObjectId(req.user.id);
 
     const updated = await Notification.findByIdAndUpdate(
       id,
-      { $addToSet: { isReadBy: userId } },
+      { $addToSet: { isReadBy: me } },
       { new: true }
-    );
+    ).lean();
 
     if (!updated) return res.status(404).json({ message: 'Notification not found.' });
 
     res.json(updated);
-  } catch {
-    res.status(500).json({ message: 'Failed to mark notification as read.' });
+  } catch (e: any) {
+    res.status(500).json({ message: e?.message || 'Failed to mark notification as read.' });
   }
 };

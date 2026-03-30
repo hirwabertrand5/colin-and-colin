@@ -2,10 +2,8 @@ import { Response } from 'express';
 import mongoose from 'mongoose';
 import PettyCashFund from '../models/pettyCashFundModel';
 import PettyCashExpense from '../models/pettyCashExpenseModel';
-import Notification from '../models/notificationModel';
-import User from '../models/userModel';
 import { AuthRequest } from '../middleware/authMiddleware';
-import { sendEmail } from '../services/emailService';
+import { notifyRoles } from '../services/notifyService';
 
 const ALLOWED_ROLES = ['managing_director', 'executive_assistant'];
 
@@ -15,16 +13,9 @@ const actorFromReq = (req: AuthRequest) => ({
 });
 
 const lowBalanceReached = (fund: any) => {
-  const threshold = (Number(fund.initialAmount) || 0) * ((Number(fund.lowBalancePercent) || 20) / 100);
+  const threshold =
+    (Number(fund.initialAmount) || 0) * ((Number(fund.lowBalancePercent) || 20) / 100);
   return (Number(fund.remainingAmount) || 0) <= threshold;
-};
-
-const getAlertRecipients = async (): Promise<string[]> => {
-  const users = await User.find(
-    { isActive: true, role: { $in: ALLOWED_ROLES } },
-    'email'
-  );
-  return users.map(u => u.email).filter(Boolean);
 };
 
 // --------------------
@@ -79,19 +70,23 @@ export const createFund = async (req: AuthRequest, res: Response) => {
       createdByName: actor.actorName,
     });
 
-    // in-app notification
-    await Notification.create({
-      type: 'PETTY_CASH_CREATED',
-      title: 'Petty Cash Fund Created',
-      message: `New petty cash fund created: ${fund.name} (RWF ${fund.initialAmount.toLocaleString()}).`,
-      fundId: fund._id,
-      severity: 'info',
-      audienceRoles: ALLOWED_ROLES,
+    // in-app notification (no email for created)
+    await notifyRoles({
+      roles: ALLOWED_ROLES,
+      category: 'pettyCashLow',
+      notification: {
+        type: 'PETTY_CASH_CREATED',
+        title: 'Petty Cash Fund Created',
+        message: `New petty cash fund created: ${fund.name} (RWF ${Number(fund.initialAmount).toLocaleString()}).`,
+        fundId: String(fund._id),
+        severity: 'info',
+        link: '/petty-cash',
+      },
     });
 
     res.status(201).json(fund);
-  } catch {
-    res.status(500).json({ message: 'Failed to create fund.' });
+  } catch (e: any) {
+    res.status(500).json({ message: e?.message || 'Failed to create fund.' });
   }
 };
 
@@ -136,12 +131,13 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: 'date, title, amount (>0) are required.' });
     }
 
+    let didTriggerLowBalance = false;
+
     await session.withTransaction(async () => {
       const fund = await PettyCashFund.findById(fundId).session(session);
       if (!fund) throw new Error('FUND_NOT_FOUND');
       if (fund.status !== 'active') throw new Error('FUND_NOT_ACTIVE');
 
-      // ✅ block overspending
       if (amt > fund.remainingAmount) throw new Error('INSUFFICIENT_FUNDS');
 
       const actor = actorFromReq(req);
@@ -166,79 +162,70 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
         { session }
       );
 
-      // update totals atomically
       fund.spentAmount = Number(fund.spentAmount) + amt;
       fund.remainingAmount = Number(fund.remainingAmount) - amt;
       await fund.save({ session });
 
-      // in-app notification for expense (optional)
-      await Notification.create(
-        [
-          {
-            type: 'PETTY_CASH_EXPENSE',
-            title: 'Petty Cash Expense Recorded',
-            message: `${actor.actorName} recorded an expense of RWF ${amt.toLocaleString()} (${String(title).trim()}).`,
-            fundId: fund._id,
-            expenseId: expense[0]._id,
-            severity: 'info',
-            audienceRoles: ALLOWED_ROLES,
-          },
-        ],
-        { session }
-      );
+      // in-app notification (no email by policy)
+      await notifyRoles({
+        roles: ALLOWED_ROLES,
+        category: 'pettyCashLow',
+        notification: {
+          type: 'PETTY_CASH_EXPENSE',
+          title: 'Petty Cash Expense Recorded',
+          message: `${actor.actorName} recorded an expense of RWF ${amt.toLocaleString()} (${String(title).trim()}).`,
+          fundId: String(fund._id),
+          expenseId: String(expense[0]._id),
+          severity: 'info',
+          link: '/petty-cash',
+        },
+      });
 
-      // low balance notification (once per fund)
       const isLow = lowBalanceReached(fund);
       const alreadyNotified = Boolean(fund.lowBalanceNotifiedAt);
 
       if (isLow && !alreadyNotified) {
         fund.lowBalanceNotifiedAt = new Date();
         await fund.save({ session });
-
-        await Notification.create(
-          [
-            {
-              type: 'PETTY_CASH_LOW',
-              title: 'Petty Cash Low Balance',
-              message: `Petty cash is low. Remaining: RWF ${Number(fund.remainingAmount).toLocaleString()} (Fund: ${fund.name}).`,
-              fundId: fund._id,
-              severity: 'warning',
-              audienceRoles: ALLOWED_ROLES,
-            },
-          ],
-          { session }
-        );
-
-        // email (outside transaction is also fine, but here we do it after commit)
+        didTriggerLowBalance = true;
       }
     });
 
-    // After transaction commit, if low balance reached and first time -> email
-    const updatedFund = await PettyCashFund.findById(fundId);
-    if (updatedFund && updatedFund.lowBalanceNotifiedAt && lowBalanceReached(updatedFund)) {
-      const recipients = await getAlertRecipients();
-      if (recipients.length) {
-        await sendEmail(
-          recipients,
-          `Petty Cash Low Balance: ${updatedFund.name}`,
-          `
-            <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-              <h2>Petty Cash Low Balance</h2>
-              <p><strong>Fund:</strong> ${updatedFund.name}</p>
-              <p><strong>Initial:</strong> RWF ${Number(updatedFund.initialAmount).toLocaleString()}</p>
-              <p><strong>Spent:</strong> RWF ${Number(updatedFund.spentAmount).toLocaleString()}</p>
-              <p><strong>Remaining:</strong> RWF ${Number(updatedFund.remainingAmount).toLocaleString()}</p>
-              <p>Remaining is at or below <strong>${updatedFund.lowBalancePercent}%</strong> threshold.</p>
-              <p>Please top up or close and create a new petty cash fund.</p>
-            </div>
-          `
-        );
+    // After commit: if low balance triggered first time -> notify + email
+    if (didTriggerLowBalance) {
+      const updatedFund = await PettyCashFund.findById(fundId).lean();
+      if (updatedFund) {
+        await notifyRoles({
+          roles: ALLOWED_ROLES,
+          category: 'pettyCashLow',
+          notification: {
+            type: 'PETTY_CASH_LOW',
+            title: 'Petty Cash Low Balance',
+            message: `Petty cash is low. Remaining: RWF ${Number(updatedFund.remainingAmount).toLocaleString()} (Fund: ${updatedFund.name}).`,
+            fundId: String(updatedFund._id),
+            severity: 'warning',
+            link: '/petty-cash',
+          },
+          email: {
+            subject: `Petty Cash Low Balance: ${updatedFund.name}`,
+            html: `
+              <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+                <h2>Petty Cash Low Balance</h2>
+                <p><strong>Fund:</strong> ${updatedFund.name}</p>
+                <p><strong>Initial:</strong> RWF ${Number(updatedFund.initialAmount).toLocaleString()}</p>
+                <p><strong>Spent:</strong> RWF ${Number(updatedFund.spentAmount).toLocaleString()}</p>
+                <p><strong>Remaining:</strong> RWF ${Number(updatedFund.remainingAmount).toLocaleString()}</p>
+                <p>Remaining is at or below <strong>${updatedFund.lowBalancePercent}%</strong> threshold.</p>
+                <p>Please top up or close and create a new petty cash fund.</p>
+              </div>
+            `,
+          },
+        });
       }
     }
 
     res.status(201).json({ message: 'Expense recorded successfully.' });
   } catch (err: any) {
-    // map known errors to messages
     const msg = String(err?.message || '');
 
     if (msg === 'FUND_NOT_FOUND') return res.status(404).json({ message: 'Fund not found.' });
@@ -268,26 +255,24 @@ export const deleteExpense = async (req: AuthRequest, res: Response) => {
 
       await PettyCashExpense.findByIdAndDelete(expenseId).session(session);
 
-      // rollback totals
       fund.spentAmount = Math.max(0, Number(fund.spentAmount) - amt);
       fund.remainingAmount = Number(fund.remainingAmount) + amt;
       await fund.save({ session });
 
       const actor = actorFromReq(req);
 
-      await Notification.create(
-        [
-          {
-            type: 'PETTY_CASH_EXPENSE',
-            title: 'Petty Cash Expense Deleted',
-            message: `${actor.actorName} deleted an expense of RWF ${amt.toLocaleString()} (${expense.title}).`,
-            fundId: fund._id,
-            severity: 'info',
-            audienceRoles: ALLOWED_ROLES,
-          },
-        ],
-        { session }
-      );
+      await notifyRoles({
+        roles: ALLOWED_ROLES,
+        category: 'pettyCashLow',
+        notification: {
+          type: 'PETTY_CASH_EXPENSE',
+          title: 'Petty Cash Expense Deleted',
+          message: `${actor.actorName} deleted an expense of RWF ${amt.toLocaleString()} (${expense.title}).`,
+          fundId: String(fund._id),
+          severity: 'info',
+          link: '/petty-cash',
+        },
+      });
     });
 
     res.json({ message: 'Expense deleted.' });

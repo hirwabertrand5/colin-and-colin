@@ -2,7 +2,15 @@ const API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5000/a
 const getToken = () => localStorage.getItem('token');
 
 export type NotificationSeverity = 'info' | 'warning' | 'critical';
-export type NotificationType = 'PETTY_CASH_LOW' | 'PETTY_CASH_CREATED' | 'PETTY_CASH_EXPENSE';
+
+export type NotificationType =
+  | 'PETTY_CASH_LOW'
+  | 'PETTY_CASH_CREATED'
+  | 'PETTY_CASH_EXPENSE'
+  | 'TASK_ASSIGNED'
+  | 'TASK_APPROVAL_REQUESTED'
+  | 'TASK_DUE_REMINDER'
+  | 'EVENT_REMINDER';
 
 export interface AppNotification {
   _id: string;
@@ -10,8 +18,18 @@ export interface AppNotification {
   title: string;
   message: string;
   severity: NotificationSeverity;
+
+  // linking/targets
+  caseId?: string;
+  taskId?: string;
+  eventId?: string;
+
   fundId?: string;
   expenseId?: string;
+
+  link?: string;        // ✅ new
+  dedupeKey?: string;   // optional
+
   createdAt: string;
   isReadBy: string[];
 }

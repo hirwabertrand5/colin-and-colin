@@ -21,6 +21,8 @@ import taskAttachmentsRoutes from './routes/taskAttachments';
 import performanceRoutes from './routes/performance';
 import clientReportRoutes from './routes/clientReports';
 import dashboardRoutes from './routes/dashboard';
+import adminEmailRoutes from './routes/adminEmail';
+
 
 const app = express();
 
@@ -78,6 +80,9 @@ app.use('/api/time-logs', timeLogRoutes);
 app.use('/api', taskAttachmentsRoutes);
 app.use('/api', clientReportRoutes);
 app.use('/api', dashboardRoutes);
+app.use('/api', adminEmailRoutes);
+
+
 // uploads
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 

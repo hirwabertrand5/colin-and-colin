@@ -1,3 +1,4 @@
+// colin-backend/src/controllers/taskController.ts
 import { Response } from 'express';
 import mongoose from 'mongoose';
 import Task from '../models/taskModel';
@@ -5,6 +6,7 @@ import Case from '../models/caseModel';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { writeAudit } from '../services/auditService';
 import TaskTimeLog from '../models/taskTimeLogModel';
+import { notifyRoles, notifyUsersById, findUserByAssigneeString } from '../services/notifyService';
 
 const actorFromReq = (req: AuthRequest) => ({
   actorName: req.user?.name || 'System',
@@ -122,9 +124,42 @@ export const addTaskToCase = async (req: AuthRequest, res: Response) => {
       }`,
     });
 
+    // ✅ Notify assignee (customized per-user)
+    const assigneeValue = String(newTask.assignee || '').trim();
+    if (assigneeValue) {
+      const assigneeUser: any = await findUserByAssigneeString(assigneeValue);
+
+      if (assigneeUser?._id && assigneeUser.isActive !== false) {
+        await notifyUsersById({
+          userIds: [String(assigneeUser._id)],
+          category: 'taskAssignments',
+          notification: {
+            type: 'TASK_ASSIGNED',
+            title: 'New task assigned',
+            message: `${newTask.title || 'Task'} (Due: ${newTask.dueDate || '-'})`,
+            severity: 'info',
+            caseId: String(caseId),
+            taskId: String(newTask._id),
+            link: `/tasks/${newTask._id}`,
+          },
+          email: {
+            subject: `Task assigned: ${newTask.title || 'Task'}`,
+            html: `<div style="font-family: Arial, sans-serif">
+                    <p>A new task has been assigned to you.</p>
+                    <p><b>${newTask.title || 'Task'}</b></p>
+                    <p>Due: ${newTask.dueDate || '-'}</p>
+                  </div>`,
+          },
+        });
+      } else {
+        // Helpful server-side hint for misconfigured assignee strings
+        console.warn('Task created but no matching active user found for assignee:', assigneeValue);
+      }
+    }
+
     res.status(201).json(newTask);
-  } catch {
-    res.status(500).json({ message: 'Failed to create task.' });
+  } catch (e: any) {
+    res.status(500).json({ message: e?.message || 'Failed to create task.' });
   }
 };
 
@@ -228,9 +263,12 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
     if (!updated) return res.status(404).json({ message: 'Task not found.' });
 
     const changes: string[] = [];
-    if (req.body.status && req.body.status !== before.status) changes.push(`Status: ${before.status} → ${req.body.status}`);
-    if (req.body.assignee && req.body.assignee !== before.assignee) changes.push(`Assignee: ${before.assignee || '-'} → ${req.body.assignee}`);
-    if (req.body.dueDate && req.body.dueDate !== before.dueDate) changes.push(`Due: ${before.dueDate || '-'} → ${req.body.dueDate}`);
+    if (req.body.status && req.body.status !== before.status)
+      changes.push(`Status: ${before.status} → ${req.body.status}`);
+    if (req.body.assignee && req.body.assignee !== before.assignee)
+      changes.push(`Assignee: ${before.assignee || '-'} → ${req.body.assignee}`);
+    if (req.body.dueDate && req.body.dueDate !== before.dueDate)
+      changes.push(`Due: ${before.dueDate || '-'} → ${req.body.dueDate}`);
     if (req.body.title && req.body.title !== before.title) changes.push(`Title changed`);
 
     await writeAudit({
@@ -303,6 +341,28 @@ export const submitTaskForApproval = async (req: AuthRequest, res: Response) => 
       detail: task.title || 'Untitled',
     });
 
+    // ✅ Notify Managing Director for approvals (broadcast to MD role)
+    await notifyRoles({
+      roles: ['managing_director'],
+      category: 'approvals',
+      notification: {
+        type: 'TASK_APPROVAL_REQUESTED',
+        title: 'Task approval requested',
+        message: `${task.title || 'Task'} is pending approval.`,
+        severity: 'warning',
+        caseId: String(task.caseId),
+        taskId: String(task._id),
+        link: `/tasks/${task._id}`,
+      },
+      email: {
+        subject: `Approval needed: ${task.title || 'Task'}`,
+        html: `<div style="font-family: Arial, sans-serif">
+                <p>A task has been submitted for approval.</p>
+                <p><b>${task.title || 'Task'}</b></p>
+              </div>`,
+      },
+    });
+
     res.json(task);
   } catch {
     res.status(500).json({ message: 'Failed to submit task for approval.' });
@@ -335,7 +395,7 @@ export const approveTask = async (req: AuthRequest, res: Response) => {
     task.approvedAt = now;
     task.rejectedAt = undefined;
 
-    task.completedAt = now; // ✅ important for on-time KPI
+    task.completedAt = now;
     task.approvedBy = req.user?.name || 'System';
     task.approvalComment = String(comment || '').trim();
 
@@ -377,11 +437,8 @@ export const rejectTask = async (req: AuthRequest, res: Response) => {
 
     task.approvalStatus = 'Rejected';
     task.rejectedAt = now;
-
-    // keep approvedAt empty when rejected
     task.approvedAt = undefined;
 
-    // If it was completed earlier (shouldn't happen in normal flow), clear completion.
     if (task.status === 'Completed') {
       task.status = 'In Progress';
     }
@@ -423,7 +480,6 @@ export const addChecklistItem = async (req: AuthRequest, res: Response) => {
 
     if (isApprovedLocked(task)) return res.status(403).json({ message: 'Task is approved and locked.' });
 
-    // Permissions: MD or assignee only
     if (req.user?.role !== 'managing_director' && task.assignee !== req.user?.name) {
       return res.status(403).json({ message: 'Forbidden.' });
     }
@@ -458,7 +514,6 @@ export const toggleChecklistItem = async (req: AuthRequest, res: Response) => {
 
     if (isApprovedLocked(task)) return res.status(403).json({ message: 'Task is approved and locked.' });
 
-    // Permissions: MD or assignee only
     if (req.user?.role !== 'managing_director' && task.assignee !== req.user?.name) {
       return res.status(403).json({ message: 'Forbidden.' });
     }
@@ -495,7 +550,6 @@ export const deleteChecklistItem = async (req: AuthRequest, res: Response) => {
 
     if (isApprovedLocked(task)) return res.status(403).json({ message: 'Task is approved and locked.' });
 
-    // Permissions: MD or assignee only
     if (req.user?.role !== 'managing_director' && task.assignee !== req.user?.name) {
       return res.status(403).json({ message: 'Forbidden.' });
     }
@@ -534,7 +588,6 @@ export const getTimeLogsForTask = async (req: AuthRequest, res: Response) => {
     const task: any = await Task.findById(taskId);
     if (!task) return res.status(404).json({ message: 'Task not found.' });
 
-    // visibility: MD or assignee only
     if (req.user?.role !== 'managing_director' && task.assignee !== req.user?.name) {
       return res.status(403).json({ message: 'Forbidden.' });
     }
@@ -565,7 +618,6 @@ export const addTimeLogToTask = async (req: AuthRequest, res: Response) => {
 
     if (isApprovedLocked(task)) return res.status(403).json({ message: 'Task is approved and locked.' });
 
-    // visibility/action: MD or assignee only
     if (req.user?.role !== 'managing_director' && task.assignee !== req.user?.name) {
       return res.status(403).json({ message: 'Forbidden.' });
     }

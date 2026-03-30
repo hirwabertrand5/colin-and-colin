@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Download, FileText, BarChart3, TrendingUp, Users } from 'lucide-react';
 import { UserRole } from '../../App';
 import { FirmReportRange, FirmReportResponse, getFirmReports } from '../../services/firmReportsService';
+import usePageTitle from '../../hooks/usePageTitle';
 
 interface FirmReportsProps {
   userRole: UserRole;
@@ -40,7 +41,7 @@ const toCsv = (rows: Array<Record<string, any>>) => {
 export default function FirmReports({ userRole }: FirmReportsProps) {
   const [selectedReport, setSelectedReport] = useState<'overview' | 'financial' | 'productivity' | 'cases'>('overview');
   const [dateRange, setDateRange] = useState<FirmReportRange>('monthly');
-
+  usePageTitle('Firm Reports');
   const [data, setData] = useState<FirmReportResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

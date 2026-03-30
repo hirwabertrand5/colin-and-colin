@@ -17,7 +17,7 @@ import InvoiceManagement from './components/billing/InvoiceManagement';
 import PerformanceDashboard from './components/reports/PerformanceDashboard';
 import FirmReports from './components/reports/FirmReports';
 import UserManagement from './components/admin/UserManagement';
-import WorkflowConfig from './components/admin/WorkflowConfig';
+
 import Settings from './components/admin/Settings';
 import HelpCenter from './components/help/HelpCenter';
 import PettyCashDashboard from './components/pettyCash/PettyCashDashboard';
@@ -126,7 +126,7 @@ function App() {
                   {(isMD || isExec) && <Route path="/admin/users" element={<UserManagement />} />}
                   {isMD && (
                     <>
-                      <Route path="/admin/workflows" element={<WorkflowConfig />} />
+                     
                       <Route path="/admin/settings" element={<Settings />} />
                     </>
                   )}
