@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import usePageTitle from '../../hooks/usePageTitle';
 import {
   Briefcase,
   CheckSquare,
@@ -89,7 +90,7 @@ export default function AssociateDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
+  usePageTitle('Dashboard');
   const [tasks, setTasks] = useState<TaskData[]>([]);
   const [casesById, setCasesById] = useState<Record<string, CaseData>>({});
   const [events, setEvents] = useState<FirmCalendarEvent[]>([]);
@@ -286,7 +287,7 @@ export default function AssociateDashboard() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Associate Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Associates, Lawyers And Interns Dashboard</h1>
         <p className="text-gray-600">
           {me?.name ? `Welcome, ${me.name}. ` : ''}
           View your assigned cases, tasks &amp; performance.

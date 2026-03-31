@@ -28,8 +28,12 @@ type StatCard = {
 };
 
 const canAccess = (role: UserRole) =>
-  role === 'associate' || role === 'managing_director' || role === 'executive_assistant';
-
+  role === 'associate' ||
+  role === 'lawyer' ||
+  role === 'intern' ||
+  role === 'managing_director' ||
+  role === 'executive_assistant';
+  
 const isoToday = () => new Date().toISOString().slice(0, 10);
 const startOfMonthISO = () => {
   const d = new Date();

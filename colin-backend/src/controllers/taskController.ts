@@ -8,6 +8,7 @@ import { writeAudit } from '../services/auditService';
 import TaskTimeLog from '../models/taskTimeLogModel';
 import { notifyRoles, notifyUsersById, findUserByAssigneeString } from '../services/notifyService';
 
+const isAssociateLikeRole = (role?: string) => role === 'associate' || role === 'lawyer' || role === 'intern';
 const actorFromReq = (req: AuthRequest) => ({
   actorName: req.user?.name || 'System',
   actorUserId: req.user?.id as string | undefined,
@@ -41,7 +42,7 @@ const canAccessCaseId = async (req: AuthRequest, caseId: string) => {
 
   if (isAdminCaseRole(role)) return true;
 
-  if (role === 'associate') {
+  if (isAssociateLikeRole(role)) {
     const me = (req.user?.name || '').trim();
     if (!me) return false;
 

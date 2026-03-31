@@ -9,6 +9,8 @@ interface CaseListProps {
   userRole: UserRole;
 }
 
+const isAssociateLike = (role: UserRole) => role === 'associate' || role === 'lawyer' || role === 'intern';
+
 export default function CaseList({ userRole }: CaseListProps) {
   usePageTitle('Cases');
 
@@ -18,7 +20,7 @@ export default function CaseList({ userRole }: CaseListProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const isAssociate = userRole === 'associate';
+  const assocLike = isAssociateLike(userRole);
   const canManageCases = userRole === 'managing_director' || userRole === 'executive_assistant';
 
   useEffect(() => {
@@ -95,10 +97,10 @@ export default function CaseList({ userRole }: CaseListProps) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900 mb-1">
-              {isAssociate ? 'My Cases' : 'Case Management'}
+              {assocLike ? 'My Cases' : 'Case Management'}
             </h1>
             <p className="text-gray-600">
-              {isAssociate ? 'Cases assigned to you' : 'Track firm-wide matters, assignments, and progress'}
+              {assocLike ? 'Cases assigned to you' : 'Track firm-wide matters, assignments, and progress'}
             </p>
           </div>
 
@@ -144,7 +146,7 @@ export default function CaseList({ userRole }: CaseListProps) {
             <option value="Execution">Execution</option>
           </select>
 
-          {!isAssociate && (
+          {!assocLike && (
             <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition">
               <Filter className="w-4 h-4 mr-2" />
               More Filters
@@ -192,11 +194,8 @@ export default function CaseList({ userRole }: CaseListProps) {
               {filteredCases.map((item, index) => (
                 <tr key={item._id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-5 text-sm text-gray-500">{index + 1}</td>
-
                   <td className="px-6 py-5 text-sm font-medium text-gray-900">{item.caseNo}</td>
-
                   <td className="px-6 py-5 text-sm text-gray-900">{item.parties}</td>
-
                   <td className="px-6 py-5 text-sm text-gray-600">{item.caseType}</td>
 
                   <td className="px-6 py-5">

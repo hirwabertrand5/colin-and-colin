@@ -12,6 +12,8 @@ interface TaskBoardProps {
 
 type BoardColumnId = 'Not Started' | 'In Progress' | 'Pending Approval' | 'Completed';
 
+const isAssociateLike = (role: UserRole) => role === 'associate' || role === 'lawyer' || role === 'intern';
+
 export default function TaskBoard({ userRole }: TaskBoardProps) {
   usePageTitle('Tasks');
 
@@ -97,26 +99,23 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
   const headerSubtitle =
     userRole === 'managing_director'
       ? 'Manage all firm tasks and approvals'
-      : userRole === 'associate'
+      : isAssociateLike(userRole)
         ? 'Your assigned tasks and deadlines'
         : 'Task coordination and tracking';
 
   return (
     <div>
-      {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900 mb-1">Tasks</h1>
         <p className="text-gray-600">{headerSubtitle}</p>
       </div>
 
-      {/* Error */}
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
           {error}
         </div>
       )}
 
-      {/* Search + Filters (match CaseList spacing/sizing) */}
       <div className="mb-6 flex flex-col sm:flex-row gap-3">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -157,7 +156,6 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
         <div className="text-center py-12 text-gray-500">Loading tasks...</div>
       ) : (
         <>
-          {/* Board */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             {columns.map((col) => {
               const colTasks = filteredTasks.filter((t) => getColumn(t) === col);
@@ -207,7 +205,6 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
                             </div>
 
                             <div className="text-sm font-semibold text-gray-900 mb-2">{task.title}</div>
-
                             <div className="text-xs text-gray-500 mb-2 truncate">{caseLabel}</div>
 
                             <div className="flex items-center justify-between text-xs text-gray-500">
@@ -224,7 +221,6 @@ export default function TaskBoard({ userRole }: TaskBoardProps) {
             })}
           </div>
 
-          {/* Summary Counters */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
             {columns.map((c) => (
               <div key={c} className="bg-white border border-gray-200 rounded-lg p-4">

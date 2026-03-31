@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import usePageTitle from '../../hooks/usePageTitle';
 import {
   Plus,
   Calendar as CalendarIcon,
@@ -24,6 +25,7 @@ export default function ExecutiveAssistantDashboard() {
   });
 
   const [todayLabel, setTodayLabel] = useState('');
+  usePageTitle('Dashboard - Executive Assistant');
   const [todaySchedule, setTodaySchedule] = useState<
     { id: string; time: string; title: string; type: string; description?: string }[]
   >([]);

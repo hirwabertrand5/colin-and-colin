@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import usePageTitle from '../../hooks/usePageTitle';
 import {
   Bell,
   AlertTriangle,
@@ -72,7 +73,7 @@ const priorityForType = (type: string, severity?: string) => {
 
 export default function NotificationCenter() {
   const navigate = useNavigate();
-
+  usePageTitle('Notification center');
   const [filter, setFilter] = useState<string>('all');
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);

@@ -22,7 +22,12 @@ import Settings from './components/admin/Settings';
 import HelpCenter from './components/help/HelpCenter';
 import PettyCashDashboard from './components/pettyCash/PettyCashDashboard';
 
-export type UserRole = 'managing_director' | 'associate' | 'executive_assistant';
+export type UserRole =
+  | 'managing_director'
+  | 'executive_assistant'
+  | 'associate'
+  | 'lawyer'
+  | 'intern';
 
 export interface User {
   id: string;
@@ -30,6 +35,8 @@ export interface User {
   name: string;
   role: UserRole;
 }
+
+const isAssociateLike = (role?: string) => role === 'associate' || role === 'lawyer' || role === 'intern';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -64,6 +71,7 @@ function App() {
 
   const isMD = user?.role === 'managing_director';
   const isExec = user?.role === 'executive_assistant';
+  const isAssocLike = isAssociateLike(user?.role);
 
   return (
     <BrowserRouter>
@@ -84,7 +92,7 @@ function App() {
                     element={
                       user.role === 'managing_director' ? (
                         <ManagingPartnerDashboard />
-                      ) : user.role === 'associate' ? (
+                      ) : isAssocLike ? (
                         <AssociateDashboard />
                       ) : (
                         <ExecutiveAssistantDashboard />
@@ -97,9 +105,7 @@ function App() {
                   <Route path="/cases/:id/*" element={<CaseWorkspace userRole={user.role} />} />
 
                   {(isMD || isExec) && <Route path="/cases/new" element={<CreateCase />} />}
-                  {user.role === 'associate' && (
-                    <Route path="/cases/new" element={<Navigate to="/cases" replace />} />
-                  )}
+                  {isAssocLike && <Route path="/cases/new" element={<Navigate to="/cases" replace />} />}
 
                   {/* Tasks */}
                   <Route path="/tasks" element={<TaskBoard userRole={user.role} />} />
@@ -124,12 +130,7 @@ function App() {
 
                   {/* Admin */}
                   {(isMD || isExec) && <Route path="/admin/users" element={<UserManagement />} />}
-                  {isMD && (
-                    <>
-                     
-                      <Route path="/admin/settings" element={<Settings />} />
-                    </>
-                  )}
+                  {isMD && <Route path="/admin/settings" element={<Settings />} />}
 
                   {/* Help */}
                   <Route path="/help" element={<HelpCenter />} />

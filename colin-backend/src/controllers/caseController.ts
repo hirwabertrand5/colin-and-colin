@@ -12,18 +12,18 @@ const actorFromReq = (req: AuthRequest) => ({
 const isAdminCaseRole = (role?: string) =>
   role === 'managing_director' || role === 'executive_assistant';
 
+const isAssociateLikeRole = (role?: string) =>
+  role === 'associate' || role === 'lawyer' || role === 'intern';
+
 /**
- * Professional associate-case access:
- * Associate can access a case if:
- * - Case.assignedTo === associate name
- *   OR
- * - Associate has at least one Task under that case assigned to them
- *
- * (This keeps your restriction "associates can't browse unrelated cases"
- * while allowing them to work on their assigned tasks.)
+ * Associate-like case access:
+ * user can access a case if:
+ * - Case.assignedTo === user name
+ * OR
+ * - user has at least one Task in that case assigned to them
  */
-const canAssociateAccessCase = async (req: AuthRequest, foundCase: any) => {
-  if (req.user?.role !== 'associate') return false;
+const canAssociateLikeAccessCase = async (req: AuthRequest, foundCase: any) => {
+  if (!isAssociateLikeRole(req.user?.role)) return false;
 
   const me = (req.user?.name || '').trim();
   if (!me) return false;
@@ -34,7 +34,7 @@ const canAssociateAccessCase = async (req: AuthRequest, foundCase: any) => {
 
   // Rule 2: has at least one task in this case
   const hasTask = await Task.exists({
-    caseId: foundCase._id, // ObjectId match
+    caseId: foundCase._id,
     assignee: me,
   });
 
@@ -46,16 +46,14 @@ export const getAllCases = async (req: AuthRequest, res: Response) => {
   try {
     const role = req.user?.role;
 
-    // ✅ MD + Exec: see all
+    // MD + Exec: see all
     if (isAdminCaseRole(role)) {
       const cases = await Case.find().sort({ updatedAt: -1 });
       return res.json(cases);
     }
 
-    // ✅ Associate: see cases they can access:
-    // - directly assigned
-    // - OR has tasks in the case
-    if (role === 'associate') {
+    // Associate-like: see cases they can access
+    if (isAssociateLikeRole(role)) {
       const me = (req.user?.name || '').trim();
       if (!me) return res.json([]);
 
@@ -72,7 +70,7 @@ export const getAllCases = async (req: AuthRequest, res: Response) => {
     }
 
     return res.status(403).json({ message: 'Forbidden.' });
-  } catch (e) {
+  } catch {
     return res.status(500).json({ message: 'Failed to fetch cases.' });
   }
 };
@@ -110,14 +108,14 @@ export const getCaseById = async (req: AuthRequest, res: Response) => {
     const foundCase: any = await Case.findById(req.params.id);
     if (!foundCase) return res.status(404).json({ message: 'Case not found.' });
 
-    // ✅ Admin roles can view all
+    // Admin roles can view all
     if (isAdminCaseRole(req.user?.role)) {
       return res.json(foundCase);
     }
 
-    // ✅ Associate: allow if assigned OR has tasks in this case
-    if (req.user?.role === 'associate') {
-      const allowed = await canAssociateAccessCase(req, foundCase);
+    // Associate-like: allow if assigned OR has tasks in this case
+    if (isAssociateLikeRole(req.user?.role)) {
+      const allowed = await canAssociateLikeAccessCase(req, foundCase);
       if (allowed) return res.json(foundCase);
     }
 

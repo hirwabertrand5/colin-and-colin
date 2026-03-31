@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import usePageTitle from '../../hooks/usePageTitle';
 import { Link } from 'react-router-dom';
 import {
   Briefcase,
@@ -49,7 +50,7 @@ const timeAgo = (isoDate: string) => {
 export default function ManagingPartnerDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
+  usePageTitle('Dashboard - Managing Director');
   const [cases, setCases] = useState<CaseData[]>([]);
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [pendingTasks, setPendingTasks] = useState<TaskData[]>([]);

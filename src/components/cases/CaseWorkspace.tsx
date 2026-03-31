@@ -100,7 +100,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const isAssociate = userRole === 'associate';
+  const isAssociate = ['associate', 'lawyer', 'intern'].includes(userRole);
   const canManageCase = userRole === 'managing_director' || userRole === 'executive_assistant';
   const canAssignTasks = userRole === 'managing_director' || userRole === 'executive_assistant';
   const canManageBilling = userRole === 'managing_director' || userRole === 'executive_assistant';
@@ -1222,16 +1222,23 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
         </div>
       )}
 
-      {/* Calendar */}
+            {/* Calendar */}
       {activeTab === 'calendar' && (
-        <div className="bg-white border border-gray-200 rounded-lg">
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-            <h2 className="font-semibold text-gray-900">Case Events & Deadlines</h2>
+            <div>
+              <h2 className="font-semibold text-gray-900">Case Events & Deadlines</h2>
+              <p className="text-sm text-gray-500 mt-1">Deadlines, hearings, meetings and milestones for this case.</p>
+            </div>
 
             {canManageCalendar && (
               <button
                 className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800"
-                onClick={() => setShowAddEvent(true)}
+                onClick={() => {
+                  setNewEvent({ title: '', type: 'Deadline', date: '', time: '', description: '' });
+                  setSelectedEvent(null);
+                  setShowAddEvent(true);
+                }}
               >
                 + Add Event
               </button>
@@ -1240,29 +1247,31 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
 
           <div>
             {events.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">No events yet for this case.</div>
+              <div className="text-center py-10 text-gray-500">No events yet for this case.</div>
             ) : (
-              <div>
+              <div className="divide-y divide-gray-100">
                 {events.map((event) => (
                   <div
                     key={event._id}
-                    className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b last:border-b-0 px-5 py-6"
+                    className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-5 py-6"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <span className="inline-block px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded mb-2">
                         {event.type}
                       </span>
-                      <div className="font-medium text-gray-900 text-lg">{event.title}</div>
+                      <div className="font-medium text-gray-900 text-lg truncate">{event.title}</div>
                       <div className="flex items-center text-sm text-gray-600 mt-1">
                         <CalendarIcon className="w-4 h-4 mr-1" />
                         {event.date} at {event.time}
                       </div>
-                      {event.description && (
-                        <div className="text-sm text-gray-500 mt-1">{event.description}</div>
-                      )}
+                      {event.description ? (
+                        <div className="text-sm text-gray-500 mt-2 whitespace-pre-line">
+                          {event.description}
+                        </div>
+                      ) : null}
                     </div>
 
-                    <div className="flex gap-2 mt-2 md:mt-0">
+                    <div className="flex gap-2 mt-2 md:mt-0 shrink-0">
                       <button
                         onClick={() => handleViewEvent(event)}
                         className="p-2 text-gray-600 hover:text-blue-700"
@@ -1297,11 +1306,287 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
             )}
           </div>
 
-          {/* Add/Edit/View modals unchanged; they remain present but actions are gated above.
-              You can keep your existing modals here (not repeated to reduce length). */}
+          {/* Add Event Modal */}
+          {showAddEvent && canManageCalendar && (
+            <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg w-full max-w-lg flex flex-col" style={{ maxHeight: '90vh' }}>
+                <div className="p-6 border-b flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Add Event</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddEvent(false)}
+                    className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <form onSubmit={handleAddEvent} className="p-6 space-y-4 overflow-y-auto">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                    <input
+                      value={newEvent.title}
+                      onChange={(e) => setNewEvent((p) => ({ ...p, title: e.target.value }))}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded"
+                      placeholder="e.g. Hearing / Filing Deadline"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                    <select
+                      value={newEvent.type}
+                      onChange={(e) => setNewEvent((p) => ({ ...p, type: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded"
+                    >
+                      {eventTypes.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                      <input
+                        type="date"
+                        value={newEvent.date}
+                        onChange={(e) => setNewEvent((p) => ({ ...p, date: e.target.value }))}
+                        required
+                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Time *</label>
+                      <input
+                        type="time"
+                        value={newEvent.time}
+                        onChange={(e) => setNewEvent((p) => ({ ...p, time: e.target.value }))}
+                        required
+                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      rows={3}
+                      value={newEvent.description || ''}
+                      onChange={(e) => setNewEvent((p) => ({ ...p, description: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded"
+                      placeholder="Optional notes for the team..."
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddEvent(false)}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800"
+                    >
+                      Add Event
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Event Modal */}
+          {showEditEvent && selectedEvent && canManageCalendar && (
+            <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg w-full max-w-lg flex flex-col" style={{ maxHeight: '90vh' }}>
+                <div className="p-6 border-b flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Edit Event</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditEvent(false);
+                      setSelectedEvent(null);
+                    }}
+                    className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <form onSubmit={handleEditEvent} className="p-6 space-y-4 overflow-y-auto">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                    <input
+                      value={newEvent.title}
+                      onChange={(e) => setNewEvent((p) => ({ ...p, title: e.target.value }))}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                    <select
+                      value={newEvent.type}
+                      onChange={(e) => setNewEvent((p) => ({ ...p, type: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded"
+                    >
+                      {eventTypes.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                      <input
+                        type="date"
+                        value={newEvent.date}
+                        onChange={(e) => setNewEvent((p) => ({ ...p, date: e.target.value }))}
+                        required
+                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Time *</label>
+                      <input
+                        type="time"
+                        value={newEvent.time}
+                        onChange={(e) => setNewEvent((p) => ({ ...p, time: e.target.value }))}
+                        required
+                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      rows={3}
+                      value={newEvent.description || ''}
+                      onChange={(e) => setNewEvent((p) => ({ ...p, description: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowEditEvent(false);
+                        setSelectedEvent(null);
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* View Event Modal */}
+          {showViewEvent && selectedEvent && (
+            <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg w-full max-w-lg">
+                <div className="p-6 border-b flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Event Details</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowViewEvent(false);
+                      setSelectedEvent(null);
+                    }}
+                    className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-3">
+                  <div>
+                    <div className="text-xs text-gray-500">Type</div>
+                    <div className="text-sm text-gray-900 font-medium">{selectedEvent.type}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-gray-500">Title</div>
+                    <div className="text-sm text-gray-900 font-medium">{selectedEvent.title}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-gray-500">When</div>
+                    <div className="text-sm text-gray-900 font-medium">
+                      {selectedEvent.date} at {selectedEvent.time}
+                    </div>
+                  </div>
+
+                  {selectedEvent.description ? (
+                    <div>
+                      <div className="text-xs text-gray-500">Description</div>
+                      <div className="text-sm text-gray-700 whitespace-pre-line">{selectedEvent.description}</div>
+                    </div>
+                  ) : null}
+
+                  <div className="pt-4 flex gap-2 justify-end">
+                    {canManageCalendar ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowViewEvent(false);
+                            openEditEvent(selectedEvent);
+                          }}
+                          className="px-4 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEvent(selectedEvent._id!)}
+                          className="px-4 py-2 border border-red-200 rounded text-sm text-red-700 hover:bg-red-50"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowViewEvent(false);
+                        setSelectedEvent(null);
+                      }}
+                      className="px-4 py-2 bg-gray-900 text-white rounded text-sm hover:bg-gray-800"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
-
+      
       {/* Documents */}
       {activeTab === 'documents' && (
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
