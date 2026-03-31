@@ -1,112 +1,93 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, BookOpen, Video, FileText, MessageCircle, ExternalLink, ChevronRight } from 'lucide-react';
+import { getHelpCategories, listHelpArticles, listHelpFaqs, HelpCategory, HelpArticleListItem, HelpFaq } from '../../services/helpService';
 
 export default function HelpCenter() {
+  const navigate = useNavigate();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  const categories = [
-    { id: 'all', label: 'All Topics', icon: BookOpen },
-    { id: 'getting-started', label: 'Getting Started', icon: FileText },
-    { id: 'cases', label: 'Case Management', icon: FileText },
-    { id: 'tasks', label: 'Tasks & Workflows', icon: FileText },
-    { id: 'billing', label: 'Billing & Invoices', icon: FileText },
-  ];
+  const [categories, setCategories] = useState<HelpCategory[]>([{ id: 'all', label: 'All Topics' }]);
+  const [articles, setArticles] = useState<HelpArticleListItem[]>([]);
+  const [faqs, setFaqs] = useState<HelpFaq[]>([]);
 
-  const helpArticles = [
-    {
-      id: '1',
-      category: 'getting-started',
-      title: 'Introduction to Colin Case Platform',
-      description: 'Learn how to navigate your dashboard and user options.',
-      icon: BookOpen,
-      type: 'Guide',
-    },
-    {
-      id: '2',
-      category: 'cases',
-      title: 'Creating a New Matter',
-      description: 'How to create a new case and assign a supervising partner',
-      icon: FileText,
-      type: 'Tutorial',
-    },
-    {
-      id: '3',
-      category: 'cases',
-      title: 'Managing Case Documents',
-      description: 'Best practices for uploading pleadings and correspondences',
-      icon: FileText,
-      type: 'Guide',
-    },
-    {
-      id: '4',
-      category: 'tasks',
-      title: 'Assigning and Tracking Tasks',
-      description: 'Delegate responsibilities to your legal team effectively',
-      icon: FileText,
-      type: 'Tutorial',
-    },
-    {
-      id: '5',
-      category: 'tasks',
-      title: 'Approvals, Reviews & Unlocks',
-      description: 'Understand how to review, approve or override steps firm-wide',
-      icon: FileText,
-      type: 'Guide',
-    },
-    {
-      id: '6',
-      category: 'billing',
-      title: 'Generating Invoices',
-      description: 'How to create and share RWF-based invoices with clients',
-      icon: FileText,
-      type: 'Tutorial',
-    },
-    {
-      id: '7',
-      category: 'billing',
-      title: 'Tracking Time & Payments',
-      description: 'Ensure billable hours are logged and paid on time',
-      icon: FileText,
-      type: 'Guide',
-    },
-  ];
+  const [loadingArticles, setLoadingArticles] = useState(false);
+  const [loadingFaqs, setLoadingFaqs] = useState(false);
+  const [error, setError] = useState('');
 
+  // Videos placeholders (keep as you requested)
   const videoTutorials = [
     { id: '1', title: 'Platform Walkthrough (5 min)', thumbnail: '▶️' },
     { id: '2', title: 'Case Creation Demo (8 min)', thumbnail: '📂' },
     { id: '3', title: 'Invoice Maker Brief (6 min)', thumbnail: '💰' },
   ];
 
-  const faqs = [
-    {
-      question: 'How do I reset my password?',
-      answer: 'Go to the Login page, click "Forgot Password", and follow reset instructions via email.',
-    },
-    {
-      question: 'Can I assign a task to more than one user?',
-      answer: 'No, but you can duplicate tasks for each assigned individual (example: pleadings or hearings).',
-    },
-    {
-      question: 'How do I export a file or case report?',
-      answer: 'Use the "Export" button in the Reports section, after filtering your report accordingly.',
-    },
-    {
-      question: 'What file types are allowed?',
-      answer: 'You can upload PDF, DOC, DOCX, XLSX, JPG, PNG formats.',
-    },
-  ];
+  useEffect(() => {
+    (async () => {
+      try {
+        const cats = await getHelpCategories();
+        setCategories(cats);
+      } catch {
+        // non-blocking
+      }
+    })();
+  }, []);
 
-  const filteredArticles = helpArticles.filter(article => {
-    const matchesCategory = selectedCategory === 'all' || article.category === selectedCategory;
-    const matchesSearch = article.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      article.description.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoadingArticles(true);
+        setError('');
+        const data = await listHelpArticles({
+          category: selectedCategory,
+          q: searchTerm.trim(),
+        });
+        if (!mounted) return;
+        setArticles(data);
+      } catch (e: any) {
+        if (!mounted) return;
+        setError(e?.message || 'Failed to load help content');
+        setArticles([]);
+      } finally {
+        if (!mounted) return;
+        setLoadingArticles(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedCategory, searchTerm]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoadingFaqs(true);
+        const data = await listHelpFaqs();
+        if (!mounted) return;
+        setFaqs(data);
+      } catch {
+        if (!mounted) return;
+        setFaqs([]);
+      } finally {
+        if (!mounted) return;
+        setLoadingFaqs(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const filteredArticles = useMemo(() => articles, [articles]);
 
   return (
     <div>
-      {/* Page Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900 mb-1">Help Center</h1>
         <p className="text-gray-600">Everything you need to use the platform productively</p>
@@ -126,7 +107,7 @@ export default function HelpCenter() {
         </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions (kept as UI placeholders) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <button className="flex items-start p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-left">
           <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
@@ -159,6 +140,12 @@ export default function HelpCenter() {
         </button>
       </div>
 
+      {error && (
+        <div className="mb-6 p-4 border border-red-200 bg-red-50 text-red-700 rounded">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Categories */}
         <div className="lg:col-span-1">
@@ -166,7 +153,8 @@ export default function HelpCenter() {
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Topics</h3>
             <div className="space-y-1">
               {categories.map((category) => {
-                const Icon = category.icon;
+                // keep same icon for now
+                const Icon = BookOpen;
                 return (
                   <button
                     key={category.id}
@@ -192,31 +180,39 @@ export default function HelpCenter() {
           {/* Help Articles */}
           <div>
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Articles</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredArticles.map((article) => {
-                const Icon = article.icon;
-                return (
-                  <button
-                    key={article.id}
-                    className="flex items-start p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-left"
-                  >
-                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
-                      <Icon className="w-5 h-5 text-gray-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-sm font-medium text-gray-900">{article.title}</p>
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
-                          {article.type}
-                        </span>
+
+            {loadingArticles ? (
+              <div className="text-gray-500">Loading articles…</div>
+            ) : filteredArticles.length === 0 ? (
+              <div className="text-gray-500">No articles found.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredArticles.map((article) => {
+                  const Icon = article.type === 'Tutorial' ? FileText : BookOpen;
+                  return (
+                    <button
+                      key={article._id}
+                      onClick={() => navigate(`/help/articles/${article._id}`)}
+                      className="flex items-start p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-left"
+                    >
+                      <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
+                        <Icon className="w-5 h-5 text-gray-600" />
                       </div>
-                      <p className="text-xs text-gray-500">{article.description}</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-400 ml-2 flex-shrink-0" />
-                  </button>
-                );
-              })}
-            </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-sm font-medium text-gray-900">{article.title}</p>
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                            {article.type}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">{article.description}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-400 ml-2 flex-shrink-0" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Videos */}
@@ -240,17 +236,24 @@ export default function HelpCenter() {
           {/* FAQs */}
           <div>
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Frequently Asked Questions</h2>
-            <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-200">
-              {faqs.map((faq, index) => (
-                <div key={index} className="p-5">
-                  <p className="text-sm font-medium text-gray-900 mb-2">{faq.question}</p>
-                  <p className="text-sm text-gray-600">{faq.answer}</p>
-                </div>
-              ))}
-            </div>
+
+            {loadingFaqs ? (
+              <div className="text-gray-500">Loading FAQs…</div>
+            ) : faqs.length === 0 ? (
+              <div className="text-gray-500">No FAQs available.</div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-200">
+                {faqs.map((faq) => (
+                  <div key={faq._id} className="p-5">
+                    <p className="text-sm font-medium text-gray-900 mb-2">{faq.question}</p>
+                    <p className="text-sm text-gray-600">{faq.answer}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Contact */}
+          {/* Contact (UI placeholder) */}
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-2">Still need help?</h2>
             <p className="text-sm text-gray-600 mb-4">

@@ -22,7 +22,7 @@ import performanceRoutes from './routes/performance';
 import clientReportRoutes from './routes/clientReports';
 import dashboardRoutes from './routes/dashboard';
 import adminEmailRoutes from './routes/adminEmail';
-
+import helpRoutes from './routes/help';
 
 const app = express();
 
@@ -81,7 +81,7 @@ app.use('/api', taskAttachmentsRoutes);
 app.use('/api', clientReportRoutes);
 app.use('/api', dashboardRoutes);
 app.use('/api', adminEmailRoutes);
-
+app.use('/api', helpRoutes);
 
 // uploads
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

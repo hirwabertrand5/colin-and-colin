@@ -17,7 +17,7 @@ import InvoiceManagement from './components/billing/InvoiceManagement';
 import PerformanceDashboard from './components/reports/PerformanceDashboard';
 import FirmReports from './components/reports/FirmReports';
 import UserManagement from './components/admin/UserManagement';
-
+import HelpArticleView from './components/help/HelpArticleView';
 import Settings from './components/admin/Settings';
 import HelpCenter from './components/help/HelpCenter';
 import PettyCashDashboard from './components/pettyCash/PettyCashDashboard';
@@ -133,6 +133,7 @@ function App() {
 
                   {/* Help */}
                   <Route path="/help" element={<HelpCenter />} />
+                  <Route path="/help/articles/:id" element={<HelpArticleView />} />
                 </Routes>
               </DashboardLayout>
             ) : (
