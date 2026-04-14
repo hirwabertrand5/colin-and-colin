@@ -43,10 +43,12 @@ export default function PettyCashDashboard() {
   const [expenseForm, setExpenseForm] = useState({
     date: '',
     title: '',
-    category: '',
-    vendor: '',
+    case: '',
+    receipt: '',
     amount: '',
     note: '',
+    refundAmount: '',
+    refundedBy: '',
     receiptFile: null as File | null,
   });
 
@@ -140,9 +142,11 @@ export default function PettyCashDashboard() {
         date: expenseForm.date,
         title: expenseForm.title.trim(),
         amount,
-        category: expenseForm.category.trim() || undefined,
-        vendor: expenseForm.vendor.trim() || undefined,
+        case: expenseForm.case.trim() || undefined,
+        receipt: expenseForm.receipt.trim() || undefined,
         note: expenseForm.note.trim() || undefined,
+        refundAmount: expenseForm.refundAmount ? Number(String(expenseForm.refundAmount).replace(/[^\d.]/g, '')) : undefined,
+        refundedBy: expenseForm.refundedBy.trim() || undefined,
         receiptFile: expenseForm.receiptFile,
       });
 
@@ -150,10 +154,12 @@ export default function PettyCashDashboard() {
       setExpenseForm({
         date: '',
         title: '',
-        category: '',
-        vendor: '',
+        case: '',
+        receipt: '',
         amount: '',
         note: '',
+        refundAmount: '',
+        refundedBy: '',
         receiptFile: null,
       });
 
@@ -363,19 +369,25 @@ export default function PettyCashDashboard() {
                           <span className="text-xs text-gray-400">{idx + 1}.</span>
                           <p className="text-sm font-medium text-gray-900">{ex.title}</p>
 
-                          {ex.category ? (
+                          {ex.case ? (
                             <span className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">
-                              {ex.category}
+                              Case: {ex.case}
                             </span>
                           ) : null}
                         </div>
 
                         <p className="text-xs text-gray-500 mb-1">
                           {ex.date} • By {ex.createdByName}
-                          {ex.vendor ? ` • Vendor: ${ex.vendor}` : ''}
+                          {ex.receipt ? ` • Receipt: ${ex.receipt}` : ''}
                         </p>
 
                         {ex.note ? <p className="text-xs text-gray-600 mt-1">{ex.note}</p> : null}
+
+                        {ex.refundAmount ? (
+                          <p className="text-xs text-green-600 mt-1">
+                            Refund: {formatRwf(ex.refundAmount)} {ex.refundedBy ? `by ${ex.refundedBy}` : ''}
+                          </p>
+                        ) : null}
 
                         <div className="mt-2 text-xs">
                           {ex.receiptUrl ? (
@@ -538,34 +550,58 @@ export default function PettyCashDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Case</label>
                   <input
-                    value={expenseForm.category}
-                    onChange={(e) => setExpenseForm((p) => ({ ...p, category: e.target.value }))}
+                    value={expenseForm.case}
+                    onChange={(e) => setExpenseForm((p) => ({ ...p, case: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded"
-                    placeholder="Supplies"
+                    placeholder="Case number or name"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Vendor</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Receipt</label>
                 <input
-                  value={expenseForm.vendor}
-                  onChange={(e) => setExpenseForm((p) => ({ ...p, vendor: e.target.value }))}
+                  value={expenseForm.receipt}
+                  onChange={(e) => setExpenseForm((p) => ({ ...p, receipt: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
-                  placeholder="Stationery shop"
+                  placeholder="Receipt number or reference"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Note (Description)</label>
                 <textarea
                   value={expenseForm.note}
                   onChange={(e) => setExpenseForm((p) => ({ ...p, note: e.target.value }))}
                   rows={2}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
+                  placeholder="Additional details about the expense"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Refund Amount (RWF)</label>
+                  <input
+                    inputMode="numeric"
+                    value={expenseForm.refundAmount}
+                    onChange={(e) => setExpenseForm((p) => ({ ...p, refundAmount: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded"
+                    placeholder="Amount refunded"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Refunded By</label>
+                  <input
+                    value={expenseForm.refundedBy}
+                    onChange={(e) => setExpenseForm((p) => ({ ...p, refundedBy: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded"
+                    placeholder="Person who refunded"
+                  />
+                </div>
               </div>
 
               <div>

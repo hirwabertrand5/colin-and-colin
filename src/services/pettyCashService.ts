@@ -27,10 +27,12 @@ export interface PettyCashExpense {
   fundId: string;
   date: string;
   title: string;
-  category?: string;
-  vendor?: string;
+  case?: string;
+  receipt?: string;
   amount: number;
   note?: string;
+  refundAmount?: number;
+  refundedBy?: string;
   receiptUrl?: string;
   createdByName: string;
   createdAt: string;
@@ -104,9 +106,11 @@ export const addExpenseToFund = async (
     date: string;
     title: string;
     amount: number;
-    category?: string;
-    vendor?: string;
+    case?: string;
+    receipt?: string;
     note?: string;
+    refundAmount?: number;
+    refundedBy?: string;
     receiptFile?: File | null;
   }
 ): Promise<void> => {
@@ -114,9 +118,11 @@ export const addExpenseToFund = async (
   form.append('date', payload.date);
   form.append('title', payload.title);
   form.append('amount', String(payload.amount));
-  if (payload.category) form.append('category', payload.category);
-  if (payload.vendor) form.append('vendor', payload.vendor);
+  if (payload.case) form.append('case', payload.case);
+  if (payload.receipt) form.append('receipt', payload.receipt);
   if (payload.note) form.append('note', payload.note);
+  if (payload.refundAmount) form.append('refundAmount', String(payload.refundAmount));
+  if (payload.refundedBy) form.append('refundedBy', payload.refundedBy);
   if (payload.receiptFile) form.append('file', payload.receiptFile);
 
   const res = await fetch(`${API_URL}/petty-cash/funds/${fundId}/expenses`, {
