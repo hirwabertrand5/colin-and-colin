@@ -4,6 +4,9 @@ import Task from '../models/taskModel';
 import { writeAudit } from '../services/auditService';
 import { AuthRequest } from '../middleware/authMiddleware';
 
+import WorkflowTemplate from '../models/workflowTemplateModel';
+import WorkflowInstance from '../models/workflowInstanceModel';
+
 const actorFromReq = (req: AuthRequest) => ({
   actorName: req.user?.name || 'System',
   actorUserId: req.user?.id as string | undefined,
@@ -15,24 +18,15 @@ const isAdminCaseRole = (role?: string) =>
 const isAssociateLikeRole = (role?: string) =>
   role === 'associate' || role === 'lawyer' || role === 'intern';
 
-/**
- * Associate-like case access:
- * user can access a case if:
- * - Case.assignedTo === user name
- * OR
- * - user has at least one Task in that case assigned to them
- */
 const canAssociateLikeAccessCase = async (req: AuthRequest, foundCase: any) => {
   if (!isAssociateLikeRole(req.user?.role)) return false;
 
   const me = (req.user?.name || '').trim();
   if (!me) return false;
 
-  // Rule 1: directly assigned on the case
   const assignedTo = String(foundCase.assignedTo || '').trim();
   if (assignedTo && assignedTo === me) return true;
 
-  // Rule 2: has at least one task in this case
   const hasTask = await Task.exists({
     caseId: foundCase._id,
     assignee: me,
@@ -41,31 +35,25 @@ const canAssociateLikeAccessCase = async (req: AuthRequest, foundCase: any) => {
   return Boolean(hasTask);
 };
 
-// Get all cases
 export const getAllCases = async (req: AuthRequest, res: Response) => {
   try {
     const role = req.user?.role;
 
-    // MD + Exec: see all
     if (isAdminCaseRole(role)) {
       const cases = await Case.find().sort({ updatedAt: -1 });
       return res.json(cases);
     }
 
-    // Associate-like: see cases they can access
     if (isAssociateLikeRole(role)) {
       const me = (req.user?.name || '').trim();
       if (!me) return res.json([]);
 
       const assignedCases = await Case.find({ assignedTo: me }).sort({ updatedAt: -1 });
-
       const taskCaseIds = await Task.distinct('caseId', { assignee: me });
       const taskCases = await Case.find({ _id: { $in: taskCaseIds } }).sort({ updatedAt: -1 });
 
-      // merge unique
       const map = new Map<string, any>();
       [...assignedCases, ...taskCases].forEach((c: any) => map.set(String(c._id), c));
-
       return res.json(Array.from(map.values()));
     }
 
@@ -75,7 +63,6 @@ export const getAllCases = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Create new case (MD/Exec only)
 export const createCase = async (req: AuthRequest, res: Response) => {
   try {
     if (!isAdminCaseRole(req.user?.role)) {
@@ -84,6 +71,59 @@ export const createCase = async (req: AuthRequest, res: Response) => {
 
     const newCase = new Case(req.body);
     await newCase.save();
+
+    // ✅ Initialize workflow instance if workflowTemplateId provided
+    const workflowTemplateId = (req.body as any)?.workflowTemplateId;
+    if (workflowTemplateId) {
+      const template: any = await WorkflowTemplate.findById(workflowTemplateId).lean();
+      if (template) {
+        const steps = (template.steps || [])
+          .slice()
+          .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+          .map((s: any, idx: number) => ({
+            stepKey: s.key,
+            title: s.title,
+            stageKey: s.stageKey,
+            order: s.order,
+            status: idx === 0 ? 'In Progress' : 'Not Started',
+            outputs: (s.outputs || []).map((o: any) => ({
+              key: o.key,
+              name: o.name,
+              required: Boolean(o.required),
+              category: o.category,
+            })),
+          }));
+
+        const inst = await WorkflowInstance.create({
+          caseId: newCase._id,
+          templateId: template._id,
+          status: 'Active',
+          currentStepKey: steps[0]?.stepKey,
+          steps,
+        });
+
+        newCase.workflowTemplateId = template._id as any;
+        newCase.workflowInstanceId = inst._id as any;
+        newCase.matterType = template.matterType;
+        newCase.workflowProgress = {
+          status: 'In Progress',
+          currentStepKey: inst.currentStepKey,
+          percent: 0,
+        };
+
+        await newCase.save();
+
+        const actor = actorFromReq(req);
+        await writeAudit({
+          caseId: String(newCase._id),
+          actorName: actor.actorName,
+          ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
+          action: 'WORKFLOW_INSTANCE_CREATED',
+          message: 'Workflow initialized from template',
+          detail: `${template.name} v${template.version}`,
+        });
+      }
+    }
 
     const actor = actorFromReq(req);
 
@@ -102,18 +142,15 @@ export const createCase = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Get single case by ID
 export const getCaseById = async (req: AuthRequest, res: Response) => {
   try {
     const foundCase: any = await Case.findById(req.params.id);
     if (!foundCase) return res.status(404).json({ message: 'Case not found.' });
 
-    // Admin roles can view all
     if (isAdminCaseRole(req.user?.role)) {
       return res.json(foundCase);
     }
 
-    // Associate-like: allow if assigned OR has tasks in this case
     if (isAssociateLikeRole(req.user?.role)) {
       const allowed = await canAssociateLikeAccessCase(req, foundCase);
       if (allowed) return res.json(foundCase);
@@ -125,7 +162,6 @@ export const getCaseById = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Update case (MD/Exec only)
 export const updateCase = async (req: AuthRequest, res: Response) => {
   try {
     if (!isAdminCaseRole(req.user?.role)) {
@@ -150,6 +186,7 @@ export const updateCase = async (req: AuthRequest, res: Response) => {
       if (req.body.caseNo && req.body.caseNo !== before.caseNo) changes.push(`Case No changed`);
       if (req.body.parties && req.body.parties !== before.parties) changes.push(`Parties changed`);
       if (req.body.caseType && req.body.caseType !== before.caseType) changes.push(`Case type changed`);
+      if (req.body.matterType && req.body.matterType !== before.matterType) changes.push(`Matter type changed`);
     }
 
     const actor = actorFromReq(req);
@@ -169,7 +206,6 @@ export const updateCase = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Delete case (MD only)
 export const deleteCase = async (req: AuthRequest, res: Response) => {
   try {
     if (req.user?.role !== 'managing_director') {

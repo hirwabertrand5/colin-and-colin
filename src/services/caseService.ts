@@ -31,6 +31,17 @@ export interface CaseData {
   workflow?: string;
   estimatedDuration?: string;
   budget?: string;
+
+  // ✅ workflow fields
+  matterType?: string;
+  workflowTemplateId?: string;
+  workflowInstanceId?: string;
+  workflowProgress?: {
+    status?: 'Not Started' | 'In Progress' | 'Completed';
+    currentStepKey?: string;
+    percent?: number;
+  };
+
   createdAt?: string;
   updatedAt?: string;
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, BookOpen, Video, FileText, MessageCircle, ExternalLink, ChevronRight } from 'lucide-react';
 import { getHelpCategories, listHelpArticles, listHelpFaqs, HelpCategory, HelpArticleListItem, HelpFaq } from '../../services/helpService';
-
+import usePageTitle from '../../hooks/usePageTitle';
 export default function HelpCenter() {
   const navigate = useNavigate();
 

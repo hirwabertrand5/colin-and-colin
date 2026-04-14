@@ -31,6 +31,23 @@ export interface ICase extends Document {
   estimatedDuration?: string;
   budget?: string;
 
+  // ✅ SOP workflow linkage
+  matterType?: string;
+  workflowTemplateId?: mongoose.Types.ObjectId;
+  workflowInstanceId?: mongoose.Types.ObjectId;
+
+  onboarding?: {
+    engagementLetterSignedAt?: Date;
+    conflictCheckStatus?: 'Pending' | 'Cleared' | 'Flagged';
+    conflictCheckedAt?: Date;
+  };
+
+  workflowProgress?: {
+    status?: 'Not Started' | 'In Progress' | 'Completed';
+    currentStepKey?: string;
+    percent?: number;
+  };
+
   clientContacts: IClientContact[];
   reporting?: ICaseReportingSettings;
 
@@ -53,7 +70,6 @@ const CaseSchema = new Schema<ICase>(
     caseNo: { type: String, required: true, trim: true },
     parties: { type: String, required: true, trim: true },
 
-    // ✅ Enforce your 3 options exactly (matches your dropdown)
     caseType: {
       type: String,
       enum: ['Transactional Cases', 'Litigation Cases', 'Labor Cases'],
@@ -64,7 +80,6 @@ const CaseSchema = new Schema<ICase>(
     status: { type: String, default: 'On Boarding', trim: true },
     priority: { type: String, default: 'Medium', trim: true },
 
-    // ✅ Important: use trimmed names to reduce mismatch issues
     assignedTo: { type: String, required: true, trim: true },
 
     description: { type: String },
@@ -72,10 +87,39 @@ const CaseSchema = new Schema<ICase>(
     estimatedDuration: { type: String },
     budget: { type: String },
 
-    // ✅ NEW: client contacts
+    // ✅ SOP linkage
+    matterType: { type: String, trim: true },
+    workflowTemplateId: { type: Schema.Types.ObjectId, ref: 'WorkflowTemplate' },
+    workflowInstanceId: { type: Schema.Types.ObjectId, ref: 'WorkflowInstance' },
+
+    onboarding: {
+      type: {
+        engagementLetterSignedAt: { type: Date },
+        conflictCheckStatus: {
+          type: String,
+          enum: ['Pending', 'Cleared', 'Flagged'],
+          default: 'Pending',
+        },
+        conflictCheckedAt: { type: Date },
+      },
+      default: {},
+    },
+
+    workflowProgress: {
+      type: {
+        status: {
+          type: String,
+          enum: ['Not Started', 'In Progress', 'Completed'],
+          default: 'Not Started',
+        },
+        currentStepKey: { type: String },
+        percent: { type: Number, min: 0, max: 100, default: 0 },
+      },
+      default: {},
+    },
+
     clientContacts: { type: [ClientContactSchema], default: [] },
 
-    // ✅ NEW: reporting settings
     reporting: {
       type: {
         weeklyEnabled: { type: Boolean, default: false },

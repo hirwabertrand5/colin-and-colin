@@ -130,7 +130,7 @@ function App() {
 
                   {/* Admin */}
                   {(isMD || isExec) && <Route path="/admin/users" element={<UserManagement />} />}
-                  {isMD && <Route path="/admin/settings" element={<Settings />} />}
+                  {(isMD || isExec) && <Route path="/admin/settings" element={<Settings />} />}
 
                   {/* Help */}
                   <Route path="/help" element={<HelpCenter />} />

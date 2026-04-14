@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "module": "commonjs",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "target": "es6",
     "outDir": "./dist",
     "rootDir": "./src",
@@ -13,8 +13,7 @@
     "declarationMap": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "types": ["vite/client"]
-
+    "types": ["node"]
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]

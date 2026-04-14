@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
-import { createCase, CaseData } from '../../services/caseService';
+import { createCase, CaseData, CaseType } from '../../services/caseService';
+import { listActiveWorkflowTemplates, WorkflowTemplate } from '../../services/workflowService';
 
 type StaffUser = {
   _id: string;
@@ -18,31 +19,30 @@ export default function CreateCase() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadingStaff, setLoadingStaff] = useState(false);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
 
   const [formData, setFormData] = useState<CaseData>({
     caseNo: '',
     parties: '',
-    caseType: '',
+    caseType: 'Transactional Cases' as CaseType,
     status: 'On Boarding',
     priority: 'Medium',
     assignedTo: '',
     description: '',
-    workflow: 'land_dispute',
+    workflow: '',
     estimatedDuration: '',
     budget: '',
+    workflowTemplateId: '',
   });
 
-  const caseTypes = [
-    'Transactional Cases',
-    'Litigation Cases',
-    'Labor Cases',
-  ];
+  const caseTypes: CaseType[] = ['Transactional Cases', 'Litigation Cases', 'Labor Cases'];
 
-  // ✅ Added "Under Submission" after "On Boarding"
   const statuses = [
     'On Boarding',
     'Under Submission',
@@ -65,7 +65,6 @@ export default function CreateCase() {
           },
         });
 
-        // basic auth handling
         if (res.status === 401) {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
@@ -74,9 +73,9 @@ export default function CreateCase() {
         }
 
         if (!res.ok) {
-  const text = await res.text();
-  throw new Error(`Failed to fetch staff users (${res.status}): ${text}`);
-}
+          const text = await res.text();
+          throw new Error(`Failed to fetch staff users (${res.status}): ${text}`);
+        }
 
         const data: StaffUser[] = await res.json();
         setStaffUsers(data);
@@ -90,7 +89,22 @@ export default function CreateCase() {
     fetchStaff();
   }, []);
 
-  const handleInputChange = (field: string, value: string) => {
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      setTemplatesLoading(true);
+      try {
+        const data = await listActiveWorkflowTemplates();
+        setTemplates(data);
+      } catch (e: any) {
+        setError(e.message || 'Failed to load workflow templates');
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+    fetchTemplates();
+  }, []);
+
+  const handleInputChange = (field: string, value: any) => {
     setFormData({ ...formData, [field]: value });
   };
 
@@ -122,7 +136,7 @@ export default function CreateCase() {
       return formData.caseNo && formData.parties && formData.caseType && formData.assignedTo;
     }
     if (step === 2) {
-      return formData.workflow;
+      return Boolean(formData.workflowTemplateId);
     }
     return true;
   };
@@ -151,9 +165,13 @@ export default function CreateCase() {
                 <div
                   className={`
                     w-10 h-10 rounded-full flex items-center justify-center font-medium
-                    ${step > stepNumber ? 'bg-gray-800 text-white' :
-                      step === stepNumber ? 'bg-gray-800 text-white' :
-                      'bg-gray-200 text-gray-500'}
+                    ${
+                      step > stepNumber
+                        ? 'bg-gray-800 text-white'
+                        : step === stepNumber
+                          ? 'bg-gray-800 text-white'
+                          : 'bg-gray-200 text-gray-500'
+                    }
                   `}
                 >
                   {step > stepNumber ? <Check className="w-5 h-5" /> : stepNumber}
@@ -176,14 +194,10 @@ export default function CreateCase() {
 
       {/* Error/Success */}
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">{error}</div>
       )}
       {success && (
-        <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
-          {success}
-        </div>
+        <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">{success}</div>
       )}
 
       {/* Form Content */}
@@ -192,9 +206,7 @@ export default function CreateCase() {
         {step === 1 && (
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Case No. *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Case No. *</label>
               <input
                 type="text"
                 value={formData.caseNo}
@@ -205,9 +217,7 @@ export default function CreateCase() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Parties *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Parties *</label>
               <input
                 type="text"
                 value={formData.parties}
@@ -219,25 +229,25 @@ export default function CreateCase() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Case Type *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Case Type *</label>
                 <select
                   value={formData.caseType}
-                  onChange={(e) => handleInputChange('caseType', e.target.value)}
+                  onChange={(e) => handleInputChange('caseType', e.target.value as CaseType)}
                   className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
                 >
-                  <option value="">Select type</option>
-                  {caseTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
+                  {caseTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  This is the firm classification. Workflow template can auto-suggest this.
+                </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Priority *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Priority *</label>
                 <select
                   value={formData.priority}
                   onChange={(e) => handleInputChange('priority', e.target.value)}
@@ -251,27 +261,20 @@ export default function CreateCase() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Assigned To *
-              </label>
-
+              <label className="block text-sm font-medium text-gray-700 mb-2">Assigned To *</label>
               <select
                 value={formData.assignedTo}
                 onChange={(e) => handleInputChange('assignedTo', e.target.value)}
                 disabled={loadingStaff}
                 className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-60"
               >
-                <option value="">
-                  {loadingStaff ? 'Loading staff...' : 'Select staff'}
-                </option>
-
+                <option value="">{loadingStaff ? 'Loading staff...' : 'Select staff'}</option>
                 {staffUsers.map((u) => (
                   <option key={u._id} value={u.name}>
                     {u.name} ({ROLE_DISPLAY_MAP[u.role] || u.role})
                   </option>
                 ))}
               </select>
-
               {!loadingStaff && staffUsers.length === 0 && (
                 <p className="text-xs text-gray-500 mt-2">
                   No active staff users found. Add users first in Administration → Users.
@@ -280,9 +283,7 @@ export default function CreateCase() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Case Description
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Case Description</label>
               <textarea
                 value={formData.description}
                 onChange={(e) => handleInputChange('description', e.target.value)}
@@ -298,38 +299,56 @@ export default function CreateCase() {
         {step === 2 && (
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Select Status *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Select Status *</label>
               <select
                 value={formData.status}
                 onChange={(e) => handleInputChange('status', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
               >
-                {statuses.map(status => (
-                  <option key={status} value={status}>{status}</option>
+                {statuses.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
                 ))}
               </select>
             </div>
 
+            {/* ✅ Workflow Template */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Case Type
-              </label>
-              <input
-                type="text"
-                value={formData.workflow}
-                onChange={(e) => handleInputChange('workflow', e.target.value)}
-                placeholder="e.g., land_dispute"
+              <label className="block text-sm font-medium text-gray-700 mb-3">Workflow Template *</label>
+              <select
+                value={formData.workflowTemplateId || ''}
+                onChange={(e) => {
+                  const templateId = e.target.value;
+                  const t = templates.find((x) => x._id === templateId);
+
+                  setFormData((prev) => ({
+                    ...prev,
+                    workflowTemplateId: templateId,
+                    caseType: (t?.caseType as CaseType) || prev.caseType,
+                    workflow: t?.matterType || prev.workflow,
+                  }));
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
-              />
-            </div>~
+                disabled={templatesLoading}
+              >
+                <option value="">
+                  {templatesLoading ? 'Loading templates...' : 'Select workflow template'}
+                </option>
+                {templates.map((t) => (
+                  <option key={t._id} value={t._id}>
+                    {t.matterType} (v{t.version})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-2">
+                Selecting a workflow template will generate SOP steps and required deliverables for this case.
+              </p>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Estimated Duration (days)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Estimated Duration (days)</label>
                 <input
                   type="number"
                   value={formData.estimatedDuration}
@@ -340,9 +359,7 @@ export default function CreateCase() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Budget Estimate
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Budget Estimate</label>
                 <input
                   type="text"
                   value={formData.budget}
@@ -361,30 +378,21 @@ export default function CreateCase() {
             <div>
               <h3 className="text-sm font-medium text-gray-900 mb-4">Review Case Details</h3>
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-4 py-3 border-b border-gray-200">
-                  <span className="text-sm text-gray-600">Case No.:</span>
-                  <span className="col-span-2 text-sm font-medium text-gray-900">{formData.caseNo}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4 py-3 border-b border-gray-200">
-                  <span className="text-sm text-gray-600">Parties:</span>
-                  <span className="col-span-2 text-sm font-medium text-gray-900">{formData.parties}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4 py-3 border-b border-gray-200">
-                  <span className="text-sm text-gray-600">Case Type:</span>
-                  <span className="col-span-2 text-sm font-medium text-gray-900">{formData.caseType}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4 py-3 border-b border-gray-200">
-                  <span className="text-sm text-gray-600">Assigned To:</span>
-                  <span className="col-span-2 text-sm font-medium text-gray-900">{formData.assignedTo}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4 py-3 border-b border-gray-200">
-                  <span className="text-sm text-gray-600">Priority:</span>
-                  <span className="col-span-2 text-sm font-medium text-gray-900">{formData.priority}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4 py-3 border-b border-gray-200">
-                  <span className="text-sm text-gray-600">Status:</span>
-                  <span className="col-span-2 text-sm font-medium text-gray-900">{formData.status}</span>
-                </div>
+                {[
+                  ['Case No.', formData.caseNo],
+                  ['Parties', formData.parties],
+                  ['Case Type', formData.caseType],
+                  ['Assigned To', formData.assignedTo],
+                  ['Priority', formData.priority],
+                  ['Status', formData.status],
+                  ['Workflow Template', formData.workflowTemplateId ? 'Selected' : 'Not selected'],
+                ].map(([k, v]) => (
+                  <div key={k} className="grid grid-cols-3 gap-4 py-3 border-b border-gray-200">
+                    <span className="text-sm text-gray-600">{k}:</span>
+                    <span className="col-span-2 text-sm font-medium text-gray-900">{v}</span>
+                  </div>
+                ))}
+
                 {formData.description && (
                   <div className="py-3">
                     <span className="text-sm text-gray-600 block mb-2">Description:</span>
@@ -448,7 +456,6 @@ export default function CreateCase() {
   );
 }
 
-// optional display map for roles
 const ROLE_DISPLAY_MAP: Record<string, string> = {
   managing_director: 'Managing Director',
   lawyer: 'Lawyer',

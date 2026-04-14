@@ -292,7 +292,7 @@ export default function UserManagement() {
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">User</th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Role</th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Last Login</th>
+                  
                   {canManageUsers && (
                     <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
                   )}
@@ -321,7 +321,7 @@ export default function UserManagement() {
                         {u.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-sm text-gray-600">{formatDate(u.lastLogin)}</td>
+                    
 
                     {canManageUsers && (
                       <td className="px-5 py-4">

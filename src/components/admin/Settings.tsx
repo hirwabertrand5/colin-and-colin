@@ -8,6 +8,8 @@ import {
   NotificationPreferences,
 } from '../../services/notificationPreferencesService';
 
+import WorkflowTemplates from './WorkflowTemplates';
+
 export default function Settings() {
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [loading, setLoading] = useState(false);
@@ -119,6 +121,9 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* ✅ Workflow templates editor */}
+        <WorkflowTemplates />
+
         {/* Email Integration */}
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <div className="flex items-center mb-4">
@@ -166,7 +171,7 @@ export default function Settings() {
             </div>
 
             <p className="text-xs text-gray-500">
-              SMTP credentials are read from backend environment variables (Brevo SMTP recommended).
+              SMTP credentials are read from backend environment variables.
             </p>
           </div>
         </div>
@@ -256,7 +261,6 @@ export default function Settings() {
           </button>
         </div>
 
-        {/* Keep other sections static for now (Backup/Security) */}
         <div className="bg-white border border-gray-200 rounded-lg p-6 opacity-70">
           <div className="flex items-center mb-4">
             <Database className="w-5 h-5 text-gray-700 mr-2" />

@@ -23,7 +23,7 @@ import clientReportRoutes from './routes/clientReports';
 import dashboardRoutes from './routes/dashboard';
 import adminEmailRoutes from './routes/adminEmail';
 import helpRoutes from './routes/help';
-
+import workflowRoutes from './routes/workflows';
 const app = express();
 
 // ✅ Allow multiple dev origins + configurable CLIENT_URL
@@ -82,7 +82,7 @@ app.use('/api', clientReportRoutes);
 app.use('/api', dashboardRoutes);
 app.use('/api', adminEmailRoutes);
 app.use('/api', helpRoutes);
-
+app.use('/api/workflows', workflowRoutes);
 // uploads
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 

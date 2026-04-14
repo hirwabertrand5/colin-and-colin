@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import CaseClientReportsTab from '../reports/CaseClientReportsTab';
+import CaseWorkflowTab from './CaseWorkflowTab';
 import {
   FileText,
   Upload,
@@ -16,7 +17,6 @@ import {
   Plus,
   Receipt,
 } from 'lucide-react';
-
 import { getAuditForCase, AuditLogItem } from '../../services/auditService';
 import { getCaseById, CaseData, updateCase } from '../../services/caseService';
 import {
@@ -63,7 +63,6 @@ type NewDocForm = {
 };
 
 const eventTypes = ['Deadline', 'Court', 'Meeting', 'Other'];
-
 
 const STAGE_ORDER = [
   'On Boarding',
@@ -114,7 +113,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
 
   // Tabs
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'tasks' | 'calendar' | 'documents' | 'billing' | 'audit' | 'reports'
+    'overview' | 'workflow' | 'tasks' | 'calendar' | 'documents' | 'billing' | 'audit' | 'reports'
   >('overview');
 
   // Staff list
@@ -619,8 +618,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
 
   const totalBilled = useMemo(() => parseBudgetToNumber(caseData?.budget), [caseData?.budget]);
   const totalPaid = useMemo(
-    () =>
-      invoices.filter((i) => i.status === 'Paid').reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
+    () => invoices.filter((i) => i.status === 'Paid').reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
     [invoices]
   );
   const outstanding = useMemo(() => Math.max(0, totalBilled - totalPaid), [totalBilled, totalPaid]);
@@ -734,6 +732,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
         <nav className="flex space-x-6 overflow-x-auto">
           {[
             { id: 'overview', label: 'Overview', icon: FileText },
+            { id: 'workflow', label: 'Workflow', icon: FileText },
             { id: 'tasks', label: 'Tasks', icon: CheckSquare },
             { id: 'calendar', label: 'Calendar', icon: CalendarIcon },
             { id: 'documents', label: 'Documents', icon: Upload },
@@ -800,6 +799,10 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
             <p className="text-sm text-gray-600 whitespace-pre-line">{caseData.description}</p>
           </div>
         </div>
+      )}
+
+      {activeTab === 'workflow' && caseData?._id && (
+        <CaseWorkflowTab caseId={caseData._id} canCompleteSteps={canManageCase} canUpload={true} />
       )}
 
       {/* Tasks */}
@@ -941,9 +944,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
       )}
 
       {/* ✅ Client Reports (MD/Exec only) */}
-      {activeTab === 'reports' && canManageCase && (
-        <CaseClientReportsTab caseData={caseData} canManage={canManageCase} />
-      )}
+      {activeTab === 'reports' && canManageCase && <CaseClientReportsTab caseData={caseData} canManage={canManageCase} />}
 
       {/* ✅ Add Task Modal (only for MD/Exec) */}
       {showAddTask && canAssignTasks && (
@@ -1222,7 +1223,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
         </div>
       )}
 
-            {/* Calendar */}
+      {/* Calendar */}
       {activeTab === 'calendar' && (
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
@@ -1265,9 +1266,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                         {event.date} at {event.time}
                       </div>
                       {event.description ? (
-                        <div className="text-sm text-gray-500 mt-2 whitespace-pre-line">
-                          {event.description}
-                        </div>
+                        <div className="text-sm text-gray-500 mt-2 whitespace-pre-line">{event.description}</div>
                       ) : null}
                     </div>
 
@@ -1586,7 +1585,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
           )}
         </div>
       )}
-      
+
       {/* Documents */}
       {activeTab === 'documents' && (
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -1610,9 +1609,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
           </div>
 
           {docsError && (
-            <div className="px-6 py-3 text-sm text-red-700 bg-red-50 border-b border-red-100">
-              {docsError}
-            </div>
+            <div className="px-6 py-3 text-sm text-red-700 bg-red-50 border-b border-red-100">{docsError}</div>
           )}
 
           {docsLoading ? (
@@ -1925,7 +1922,11 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                   {/* optional invoice file */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Invoice File (optional)</label>
-                    <input type="file" onChange={(e) => setNewInvoiceFile(e.target.files?.[0] || null)} className="w-full" />
+                    <input
+                      type="file"
+                      onChange={(e) => setNewInvoiceFile(e.target.files?.[0] || null)}
+                      className="w-full"
+                    />
                     <p className="text-xs text-gray-500 mt-1">
                       Upload the invoice PDF/scan. Proof of payment is uploaded separately.
                     </p>
@@ -1942,7 +1943,10 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                     >
                       Cancel
                     </button>
-                    <button type="submit" className="flex-1 px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800">
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800"
+                    >
                       Create Invoice
                     </button>
                   </div>
@@ -2066,13 +2070,20 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Case Type</label>
-                <input
-                  type="text"
+                <select
                   value={editCaseData.caseType}
-                  onChange={(e) => setEditCaseData((c) => (c ? { ...c, caseType: e.target.value } : c))}
+                  onChange={(e) =>
+                    setEditCaseData((c) =>
+                      c ? { ...c, caseType: e.target.value as CaseData['caseType'] } : c
+                    )
+                  }
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
+                >
+                  <option value="Transactional Cases">Transactional Cases</option>
+                  <option value="Litigation Cases">Litigation Cases</option>
+                  <option value="Labor Cases">Labor Cases</option>
+                </select>
               </div>
 
               <div>
