@@ -23,7 +23,8 @@ import {
   PettyCashFund,
 } from '../../services/pettyCashService';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL;
+const BACKEND_URL = API_URL ? API_URL.replace(/\/api\/?$/, '') : '';
 
 const formatRwf = (n: number) => `RWF ${Math.round(n).toLocaleString('en-US')}`;
 

@@ -51,8 +51,7 @@ import {
   Invoice,
 } from '../../services/invoiceService';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-const API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL;
 const getToken = () => localStorage.getItem('token');
 
 type StaffUser = { _id: string; name: string; email: string; role: string };
