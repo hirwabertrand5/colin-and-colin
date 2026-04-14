@@ -17,10 +17,9 @@ import InvoiceManagement from './components/billing/InvoiceManagement';
 import PerformanceDashboard from './components/reports/PerformanceDashboard';
 import FirmReports from './components/reports/FirmReports';
 import UserManagement from './components/admin/UserManagement';
-import HelpArticleView from './components/help/HelpArticleView';
 import Settings from './components/admin/Settings';
-import HelpCenter from './components/help/HelpCenter';
 import PettyCashDashboard from './components/pettyCash/PettyCashDashboard';
+import { useAutoLogout } from './hooks/useAutoLogout';
 
 export type UserRole =
   | 'managing_director'
@@ -60,6 +59,13 @@ function App() {
     localStorage.removeItem('user');
     localStorage.removeItem('token');
   };
+
+  // Auto-logout after 2 minutes of inactivity
+  useAutoLogout({
+    timeout: 2 * 60 * 1000, // 2 minutes
+    onLogout: handleLogout,
+    enabled: !!user, // Only enable when user is logged in
+  });
 
   if (isLoading) {
     return (
@@ -131,10 +137,6 @@ function App() {
                   {/* Admin */}
                   {(isMD || isExec) && <Route path="/admin/users" element={<UserManagement />} />}
                   {(isMD || isExec) && <Route path="/admin/settings" element={<Settings />} />}
-
-                  {/* Help */}
-                  <Route path="/help" element={<HelpCenter />} />
-                  <Route path="/help/articles/:id" element={<HelpArticleView />} />
                 </Routes>
               </DashboardLayout>
             ) : (

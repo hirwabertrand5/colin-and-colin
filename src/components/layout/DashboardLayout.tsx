@@ -9,7 +9,6 @@ import {
   DollarSign,
   BarChart3,
   Settings,
-  HelpCircle,
   Menu,
   X,
   LogOut,
@@ -171,23 +170,6 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
               </div>
             )}
 
-            {/* Help */}
-            <div className="mt-8">
-              <Link
-                to="/help"
-                className={`
-                  flex items-center px-3 py-2 text-sm rounded transition-colors
-                  ${isActive('/help')
-                    ? 'bg-gray-100 text-gray-900'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }
-                `}
-                onClick={() => setSidebarOpen(false)}
-              >
-                <HelpCircle className="w-5 h-5 mr-3" />
-                Help & Support
-              </Link>
-            </div>
           </nav>
 
           {/* User Footer */}
