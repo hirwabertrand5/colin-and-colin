@@ -7,7 +7,7 @@ interface UseAutoLogoutOptions {
 }
 
 export const useAutoLogout = ({
-  timeout = 2 * 60 * 1000, // 2 minutes default
+  timeout = 15 * 60 * 1000, // 15 minutes default
   onLogout,
   enabled = true
 }: UseAutoLogoutOptions) => {
