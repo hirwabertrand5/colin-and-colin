@@ -32,6 +32,7 @@ const allowedOrigins = new Set(
     process.env.CLIENT_URL,
     'http://localhost:3000',
     'http://localhost:5173',
+    'https://app.colinandcolin.com', // Production frontend
   ].filter(Boolean) as string[]
 );
 
