@@ -60,9 +60,9 @@ function App() {
     localStorage.removeItem('token');
   };
 
-  // Auto-logout after 2 minutes of inactivity
+  // Auto-logout after 15 minutes of inactivity
   useAutoLogout({
-    timeout: 2 * 60 * 1000, // 2 minutes
+    timeout: 15 * 60 * 1000, // 15 minutes
     onLogout: handleLogout,
     enabled: !!user, // Only enable when user is logged in
   });
