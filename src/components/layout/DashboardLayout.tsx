@@ -14,8 +14,11 @@ import {
   LogOut,
   Users,
   Wallet,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { User } from '../../App';
+import { useTheme } from '../../hooks/useTheme';
 
 import companyLogo from '../../assets/logo-colin.png';
 import { getUnreadNotificationCount } from '../../services/notificationService';
@@ -37,6 +40,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const location = useLocation();
+  const { isDark, toggleTheme } = useTheme();
 
   const navigation: NavItem[] = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -91,7 +95,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -103,14 +107,14 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
       {/* Sidebar */}
       <div
         className={`
-          fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out z-50
+          fixed inset-y-0 left-0 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-200 ease-in-out z-50
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-center h-24 px-6 border-b border-gray-200">
+          <div className="flex items-center justify-center h-24 px-6 border-b border-gray-200 dark:border-gray-700">
             <img src={companyLogo} alt="Colin & Colin Logo" className="max-w-[165px] w-full object-contain" />
           </div>
 
@@ -126,8 +130,8 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
                     className={`
                       flex items-center px-3 py-2 text-sm rounded transition-colors
                       ${isActive(item.href)
-                        ? 'bg-gray-100 text-gray-900'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
                       }
                     `}
                     onClick={() => setSidebarOpen(false)}
@@ -142,7 +146,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
             {/* Admin */}
             {adminItems.length > 0 && (
               <div className="mt-8">
-                <div className="px-3 mb-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div className="px-3 mb-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Administration
                 </div>
                 <div className="space-y-1">
@@ -155,8 +159,8 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
                         className={`
                           flex items-center px-3 py-2 text-sm rounded transition-colors
                           ${isActive(item.href)
-                            ? 'bg-gray-100 text-gray-900'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                            ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
                           }
                         `}
                         onClick={() => setSidebarOpen(false)}
@@ -173,20 +177,20 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
           </nav>
 
           {/* User Footer */}
-          <div className="p-4 border-t border-gray-200">
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
             <div className="flex items-center mb-3">
-              <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 font-medium">
+              <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 font-medium">
                 {user.name.split(' ').map((n) => n[0]).join('')}
               </div>
               <div className="ml-3 flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{user.name}</p>
-                <p className="text-xs text-gray-500 truncate capitalize">{user.role.replace('_', ' ')}</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate capitalize">{user.role.replace('_', ' ')}</p>
               </div>
             </div>
 
             <button
               onClick={onLogout}
-              className="w-full flex items-center px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded transition-colors"
+              className="w-full flex items-center px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded transition-colors"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Sign Out
@@ -198,10 +202,10 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
       {/* Main Content */}
       <div className="lg:pl-64">
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-6">
+        <header className="fixed top-0 left-0 right-0 lg:left-64 h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-4 lg:px-6 z-30">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden p-2 text-gray-600 hover:text-gray-900"
+            className="lg:hidden p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
           >
             {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
@@ -209,7 +213,15 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
           <div className="hidden lg:block" />
 
           <div className="flex items-center space-x-4">
-            <Link to="/notifications" className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors">
+            <button
+              onClick={toggleTheme}
+              className="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDark ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
+            </button>
+
+            <Link to="/notifications" className="relative p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
               <Bell className="w-6 h-6" />
               {notificationCount > 0 && (
                 <span className="absolute top-0 right-0 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
@@ -218,13 +230,13 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
               )}
             </Link>
 
-            <div className="lg:hidden w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 font-medium">
+            <div className="lg:hidden w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 font-medium">
               {user.name.split(' ').map((n) => n[0]).join('')}
             </div>
           </div>
         </header>
 
-        <main className="p-4 lg:p-6">{children}</main>
+        <main className="p-4 lg:p-6 pt-20 bg-gray-50 dark:bg-gray-900 min-h-screen">{children}</main>
       </div>
     </div>
   );
