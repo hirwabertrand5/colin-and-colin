@@ -9,6 +9,11 @@ export type ClientContact = {
   isPrimary?: boolean;
 };
 
+export type LegalServicePathItem = {
+  id: string;
+  label: string;
+};
+
 export interface CaseData {
   _id?: string;
   caseNo: string;
@@ -18,6 +23,7 @@ export interface CaseData {
   priority: string;
   assignedTo: string;
   description?: string;
+  legalServicePath?: LegalServicePathItem[];
 
   clientContacts?: ClientContact[];
   reporting?: {
@@ -88,6 +94,14 @@ export const updateCase = async (caseId: string, updates: Partial<CaseData>): Pr
   });
   if (!res.ok) throw new Error((await res.json()).message || 'Failed to update case');
   return res.json();
+};
+
+export const deleteCase = async (caseId: string): Promise<void> => {
+  const res = await fetch(`${API_URL}/cases/${caseId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) throw new Error((await res.json()).message || 'Failed to delete case');
 };
 
 export const getActiveCasesCount = async () => {

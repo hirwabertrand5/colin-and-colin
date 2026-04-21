@@ -16,9 +16,11 @@ import {
   ArrowLeft,
   Plus,
   Receipt,
+  FolderTree,
+  ChevronRight,
 } from 'lucide-react';
 import { getAuditForCase, AuditLogItem } from '../../services/auditService';
-import { getCaseById, CaseData, updateCase } from '../../services/caseService';
+import { getCaseById, CaseData, updateCase, deleteCase as deleteCaseRecord } from '../../services/caseService';
 import {
   getTasksForCase,
   addTaskToCase,
@@ -94,12 +96,19 @@ const getInvoiceStatusChip = (status: Invoice['status']) => {
   return status === 'Paid' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700';
 };
 
+const getServicePathAccent = (caseType?: CaseData['caseType']) => {
+  if (caseType === 'Litigation Cases') return 'bg-red-50 text-red-700 border-red-200';
+  if (caseType === 'Labor Cases') return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-blue-50 text-blue-700 border-blue-200';
+};
+
 const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   const { id } = useParams();
   const navigate = useNavigate();
 
   const isAssociate = ['associate', 'lawyer', 'intern'].includes(userRole);
   const canManageCase = userRole === 'managing_director' || userRole === 'executive_assistant';
+  const canDeleteCase = userRole === 'managing_director';
   const canAssignTasks = userRole === 'managing_director' || userRole === 'executive_assistant';
   const canManageBilling = userRole === 'managing_director' || userRole === 'executive_assistant';
   const canManageCalendar = userRole === 'managing_director' || userRole === 'executive_assistant';
@@ -109,6 +118,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   const [caseData, setCaseData] = useState<CaseData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [deletingCase, setDeletingCase] = useState(false);
 
   // Tabs
   const [activeTab, setActiveTab] = useState<
@@ -532,6 +542,25 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
     }
   };
 
+  const handleDeleteCase = async () => {
+    if (!caseData?._id || !canDeleteCase || deletingCase) return;
+
+    const confirmed = window.confirm(
+      `Delete case "${caseData.caseNo}" for "${caseData.parties}"?\n\nThis action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingCase(true);
+      await deleteCaseRecord(caseData._id);
+      navigate('/cases');
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete case');
+    } finally {
+      setDeletingCase(false);
+    }
+  };
+
   // ----------------------------
   // Billing
   // ----------------------------
@@ -666,6 +695,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   const currentStage = caseData?.status || 'On Boarding';
   const currentStageIndex = STAGE_ORDER.findIndex((s) => s === currentStage);
   const progress = Math.round(((currentStageIndex + 1) / STAGE_ORDER.length) * 100);
+  const legalServicePath = caseData?.legalServicePath || [];
 
   const getStageStatus = (stage: string) => {
     if (STAGE_ORDER.indexOf(stage) < currentStageIndex) return 'Completed';
@@ -713,15 +743,30 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
 
           {/* ✅ Edit Case hidden for associates */}
           {canManageCase && (
-            <button
-              className="px-5 py-2 border border-gray-300 rounded-lg text-base text-gray-700 hover:bg-gray-50 font-medium"
-              onClick={() => {
-                setEditCaseData(caseData);
-                setShowEditCase(true);
-              }}
-            >
-              Edit Case
-            </button>
+            <div className="flex items-center gap-3">
+              {canDeleteCase && (
+                <button
+                  type="button"
+                  onClick={handleDeleteCase}
+                  disabled={deletingCase}
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  title="Delete case"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {deletingCase ? 'Deleting...' : 'Delete'}
+                </button>
+              )}
+
+              <button
+                className="px-5 py-2 border border-gray-300 rounded-lg text-base text-gray-700 hover:bg-gray-50 font-medium"
+                onClick={() => {
+                  setEditCaseData(caseData);
+                  setShowEditCase(true);
+                }}
+              >
+                Edit Case
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -791,6 +836,60 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                 );
               })}
             </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-4">
+              <div>
+                <h2 className="font-semibold text-gray-900">Legal Service Classification</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  The saved decision-tree path for this case.
+                </p>
+              </div>
+              <span
+                className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${getServicePathAccent(caseData.caseType)}`}
+              >
+                {caseData.caseType}
+              </span>
+            </div>
+
+            {legalServicePath.length > 0 ? (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-4">
+                  <FolderTree className="w-4 h-4" />
+                  <span>Selected Path</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {legalServicePath.map((item, index) => (
+                    <React.Fragment key={`${item.id}-${index}`}>
+                      <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm">
+                        <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-900 text-[11px] font-semibold text-white">
+                          {index + 1}
+                        </span>
+                        {item.label}
+                      </span>
+                      {index < legalServicePath.length - 1 && <ChevronRight className="w-4 h-4 text-gray-400" />}
+                    </React.Fragment>
+                  ))}
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Computed Case Type</p>
+                    <p className="mt-1 text-sm font-semibold text-gray-900">{caseData.caseType}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Suggested Matter Type</p>
+                    <p className="mt-1 text-sm font-semibold text-gray-900">{caseData.workflow || 'Not specified'}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-500">
+                No legal service classification path was saved for this case.
+              </div>
+            )}
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-6">

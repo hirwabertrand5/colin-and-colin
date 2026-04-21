@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -18,13 +9,10 @@ const pettyCashFundModel_1 = __importDefault(require("../models/pettyCashFundMod
 const pettyCashExpenseModel_1 = __importDefault(require("../models/pettyCashExpenseModel"));
 const notifyService_1 = require("../services/notifyService");
 const ALLOWED_ROLES = ['managing_director', 'executive_assistant'];
-const actorFromReq = (req) => {
-    var _a, _b;
-    return ({
-        actorName: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.name) || 'System',
-        actorUserId: (_b = req.user) === null || _b === void 0 ? void 0 : _b.id,
-    });
-};
+const actorFromReq = (req) => ({
+    actorName: req.user?.name || 'System',
+    actorUserId: req.user?.id,
+});
 const lowBalanceReached = (fund) => {
     const threshold = (Number(fund.initialAmount) || 0) * ((Number(fund.lowBalancePercent) || 20) / 100);
     return (Number(fund.remainingAmount) || 0) <= threshold;
@@ -32,41 +20,41 @@ const lowBalanceReached = (fund) => {
 // --------------------
 // Funds
 // --------------------
-const getActiveFund = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getActiveFund = async (req, res) => {
     try {
-        const fund = yield pettyCashFundModel_1.default.findOne({ status: 'active' }).sort({ createdAt: -1 });
+        const fund = await pettyCashFundModel_1.default.findOne({ status: 'active' }).sort({ createdAt: -1 });
         res.json(fund);
     }
-    catch (_a) {
+    catch {
         res.status(500).json({ message: 'Failed to load active fund.' });
     }
-});
+};
 exports.getActiveFund = getActiveFund;
-const listFunds = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const listFunds = async (req, res) => {
     try {
-        const funds = yield pettyCashFundModel_1.default.find().sort({ createdAt: -1 }).limit(100);
+        const funds = await pettyCashFundModel_1.default.find().sort({ createdAt: -1 }).limit(100);
         res.json(funds);
     }
-    catch (_a) {
+    catch {
         res.status(500).json({ message: 'Failed to fetch funds.' });
     }
-});
+};
 exports.listFunds = listFunds;
-const createFund = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const createFund = async (req, res) => {
     try {
         const { name, description, initialAmount } = req.body || {};
         const num = Number(initialAmount);
         if (!name || !Number.isFinite(num) || num <= 0) {
             return res.status(400).json({ message: 'name and initialAmount (>0) are required.' });
         }
-        const existingActive = yield pettyCashFundModel_1.default.findOne({ status: 'active' });
+        const existingActive = await pettyCashFundModel_1.default.findOne({ status: 'active' });
         if (existingActive) {
             return res.status(400).json({
                 message: 'An active petty cash fund already exists. Close it before creating a new one.',
             });
         }
         const actor = actorFromReq(req);
-        const fund = yield pettyCashFundModel_1.default.create({
+        const fund = await pettyCashFundModel_1.default.create({
             name: String(name).trim(),
             description: description ? String(description).trim() : '',
             initialAmount: num,
@@ -79,7 +67,7 @@ const createFund = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             createdByName: actor.actorName,
         });
         // in-app notification (no email for created)
-        yield (0, notifyService_1.notifyRoles)({
+        await (0, notifyService_1.notifyRoles)({
             roles: ALLOWED_ROLES,
             category: 'pettyCashLow',
             notification: {
@@ -94,42 +82,42 @@ const createFund = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         res.status(201).json(fund);
     }
     catch (e) {
-        res.status(500).json({ message: (e === null || e === void 0 ? void 0 : e.message) || 'Failed to create fund.' });
+        res.status(500).json({ message: e?.message || 'Failed to create fund.' });
     }
-});
+};
 exports.createFund = createFund;
-const closeActiveFund = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const closeActiveFund = async (req, res) => {
     try {
-        const fund = yield pettyCashFundModel_1.default.findOne({ status: 'active' });
+        const fund = await pettyCashFundModel_1.default.findOne({ status: 'active' });
         if (!fund)
             return res.status(404).json({ message: 'No active fund found.' });
         fund.status = 'closed';
-        yield fund.save();
+        await fund.save();
         res.json({ message: 'Fund closed.', fund });
     }
-    catch (_a) {
+    catch {
         res.status(500).json({ message: 'Failed to close fund.' });
     }
-});
+};
 exports.closeActiveFund = closeActiveFund;
 // --------------------
 // Expenses
 // --------------------
-const listExpensesForFund = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const listExpensesForFund = async (req, res) => {
     try {
         const { fundId } = req.params;
-        const expenses = yield pettyCashExpenseModel_1.default.find({ fundId: new mongoose_1.default.Types.ObjectId(fundId) })
+        const expenses = await pettyCashExpenseModel_1.default.find({ fundId: new mongoose_1.default.Types.ObjectId(fundId) })
             .sort({ date: -1, createdAt: -1 })
             .limit(500);
         res.json(expenses);
     }
-    catch (_a) {
+    catch {
         res.status(500).json({ message: 'Failed to fetch expenses.' });
     }
-});
+};
 exports.listExpensesForFund = listExpensesForFund;
-const createExpense = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const session = yield mongoose_1.default.startSession();
+const createExpense = async (req, res) => {
+    const session = await mongoose_1.default.startSession();
     try {
         const { fundId } = req.params;
         const { date, title, amount, category, vendor, note } = req.body || {};
@@ -138,9 +126,8 @@ const createExpense = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             return res.status(400).json({ message: 'date, title, amount (>0) are required.' });
         }
         let didTriggerLowBalance = false;
-        yield session.withTransaction(() => __awaiter(void 0, void 0, void 0, function* () {
-            var _a;
-            const fund = yield pettyCashFundModel_1.default.findById(fundId).session(session);
+        await session.withTransaction(async () => {
+            const fund = await pettyCashFundModel_1.default.findById(fundId).session(session);
             if (!fund)
                 throw new Error('FUND_NOT_FOUND');
             if (fund.status !== 'active')
@@ -148,8 +135,8 @@ const createExpense = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             if (amt > fund.remainingAmount)
                 throw new Error('INSUFFICIENT_FUNDS');
             const actor = actorFromReq(req);
-            const receiptUrl = ((_a = req.file) === null || _a === void 0 ? void 0 : _a.filename) ? `/uploads/${req.file.filename}` : undefined;
-            const expense = yield pettyCashExpenseModel_1.default.create([
+            const receiptUrl = req.file?.filename ? `/uploads/${req.file.filename}` : undefined;
+            const expense = await pettyCashExpenseModel_1.default.create([
                 {
                     fundId: fund._id,
                     date: String(date),
@@ -165,9 +152,9 @@ const createExpense = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             ], { session });
             fund.spentAmount = Number(fund.spentAmount) + amt;
             fund.remainingAmount = Number(fund.remainingAmount) - amt;
-            yield fund.save({ session });
+            await fund.save({ session });
             // in-app notification (no email by policy)
-            yield (0, notifyService_1.notifyRoles)({
+            await (0, notifyService_1.notifyRoles)({
                 roles: ALLOWED_ROLES,
                 category: 'pettyCashLow',
                 notification: {
@@ -184,15 +171,15 @@ const createExpense = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             const alreadyNotified = Boolean(fund.lowBalanceNotifiedAt);
             if (isLow && !alreadyNotified) {
                 fund.lowBalanceNotifiedAt = new Date();
-                yield fund.save({ session });
+                await fund.save({ session });
                 didTriggerLowBalance = true;
             }
-        }));
+        });
         // After commit: if low balance triggered first time -> notify + email
         if (didTriggerLowBalance) {
-            const updatedFund = yield pettyCashFundModel_1.default.findById(fundId).lean();
+            const updatedFund = await pettyCashFundModel_1.default.findById(fundId).lean();
             if (updatedFund) {
-                yield (0, notifyService_1.notifyRoles)({
+                await (0, notifyService_1.notifyRoles)({
                     roles: ALLOWED_ROLES,
                     category: 'pettyCashLow',
                     notification: {
@@ -223,7 +210,7 @@ const createExpense = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         res.status(201).json({ message: 'Expense recorded successfully.' });
     }
     catch (err) {
-        const msg = String((err === null || err === void 0 ? void 0 : err.message) || '');
+        const msg = String(err?.message || '');
         if (msg === 'FUND_NOT_FOUND')
             return res.status(404).json({ message: 'Fund not found.' });
         if (msg === 'FUND_NOT_ACTIVE')
@@ -235,26 +222,26 @@ const createExpense = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     finally {
         session.endSession();
     }
-});
+};
 exports.createExpense = createExpense;
-const deleteExpense = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const session = yield mongoose_1.default.startSession();
+const deleteExpense = async (req, res) => {
+    const session = await mongoose_1.default.startSession();
     try {
         const { expenseId } = req.params;
-        yield session.withTransaction(() => __awaiter(void 0, void 0, void 0, function* () {
-            const expense = yield pettyCashExpenseModel_1.default.findById(expenseId).session(session);
+        await session.withTransaction(async () => {
+            const expense = await pettyCashExpenseModel_1.default.findById(expenseId).session(session);
             if (!expense)
                 throw new Error('EXPENSE_NOT_FOUND');
-            const fund = yield pettyCashFundModel_1.default.findById(expense.fundId).session(session);
+            const fund = await pettyCashFundModel_1.default.findById(expense.fundId).session(session);
             if (!fund)
                 throw new Error('FUND_NOT_FOUND');
             const amt = Number(expense.amount) || 0;
-            yield pettyCashExpenseModel_1.default.findByIdAndDelete(expenseId).session(session);
+            await pettyCashExpenseModel_1.default.findByIdAndDelete(expenseId).session(session);
             fund.spentAmount = Math.max(0, Number(fund.spentAmount) - amt);
             fund.remainingAmount = Number(fund.remainingAmount) + amt;
-            yield fund.save({ session });
+            await fund.save({ session });
             const actor = actorFromReq(req);
-            yield (0, notifyService_1.notifyRoles)({
+            await (0, notifyService_1.notifyRoles)({
                 roles: ALLOWED_ROLES,
                 category: 'pettyCashLow',
                 notification: {
@@ -266,11 +253,11 @@ const deleteExpense = (req, res) => __awaiter(void 0, void 0, void 0, function* 
                     link: '/petty-cash',
                 },
             });
-        }));
+        });
         res.json({ message: 'Expense deleted.' });
     }
     catch (err) {
-        const msg = String((err === null || err === void 0 ? void 0 : err.message) || '');
+        const msg = String(err?.message || '');
         if (msg === 'EXPENSE_NOT_FOUND')
             return res.status(404).json({ message: 'Expense not found.' });
         if (msg === 'FUND_NOT_FOUND')
@@ -280,6 +267,6 @@ const deleteExpense = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     finally {
         session.endSession();
     }
-});
+};
 exports.deleteExpense = deleteExpense;
 //# sourceMappingURL=pettyCashController.js.map

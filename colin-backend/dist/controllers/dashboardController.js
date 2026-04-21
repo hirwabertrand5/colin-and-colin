@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -31,10 +22,9 @@ const startOfMonthDate = () => {
     return d;
 };
 const toISODate = (d) => d.toISOString().slice(0, 10);
-const getExecutiveAssistantDashboard = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+const getExecutiveAssistantDashboard = async (req, res) => {
     try {
-        const role = (_a = req.user) === null || _a === void 0 ? void 0 : _a.role;
+        const role = req.user?.role;
         if (role !== 'managing_director' && role !== 'executive_assistant') {
             return res.status(403).json({ message: 'Forbidden.' });
         }
@@ -44,7 +34,7 @@ const getExecutiveAssistantDashboard = (req, res) => __awaiter(void 0, void 0, v
         // ----------------------------
         // Stats (MTD)
         // ----------------------------
-        const [casesCreatedMTD, documentsUploadedMTD, scheduledEventsMTD, tasksCoordinatedMTD] = yield Promise.all([
+        const [casesCreatedMTD, documentsUploadedMTD, scheduledEventsMTD, tasksCoordinatedMTD] = await Promise.all([
             caseModel_1.default.countDocuments({ createdAt: { $gte: monthStartDate } }),
             documentModel_1.default.countDocuments({ createdAt: { $gte: monthStartDate } }),
             eventModel_1.default.countDocuments({ date: { $gte: monthStartISO, $lte: todayISO } }),
@@ -53,13 +43,13 @@ const getExecutiveAssistantDashboard = (req, res) => __awaiter(void 0, void 0, v
         // ----------------------------
         // Today schedule (events today)
         // ----------------------------
-        const todayEvents = yield eventModel_1.default.find({ date: todayISO })
+        const todayEvents = await eventModel_1.default.find({ date: todayISO })
             .sort({ time: 1 })
             .limit(20)
             .lean();
         // Attach case labels to events
         const todayCaseIds = Array.from(new Set(todayEvents.map((e) => String(e.caseId)).filter(Boolean)));
-        const todayCases = yield caseModel_1.default.find({ _id: { $in: todayCaseIds } }).select('_id caseNo parties').lean();
+        const todayCases = await caseModel_1.default.find({ _id: { $in: todayCaseIds } }).select('_id caseNo parties').lean();
         const caseMap = new Map(todayCases.map((c) => [String(c._id), c]));
         const todaySchedule = todayEvents.map((e) => {
             const c = caseMap.get(String(e.caseId));
@@ -76,13 +66,13 @@ const getExecutiveAssistantDashboard = (req, res) => __awaiter(void 0, void 0, v
         // Pending follow-up (tasks)
         // - show tasks not completed, soonest due first
         // ----------------------------
-        const pendingTasks = yield taskModel_1.default.find({ status: { $ne: 'Completed' } })
+        const pendingTasks = await taskModel_1.default.find({ status: { $ne: 'Completed' } })
             .sort({ dueDate: 1, priority: 1 })
             .limit(10)
             .lean();
         // attach case labels to tasks
         const pendingCaseIds = Array.from(new Set(pendingTasks.map((t) => String(t.caseId)).filter(Boolean)));
-        const pendingCases = yield caseModel_1.default.find({ _id: { $in: pendingCaseIds } }).select('_id caseNo parties').lean();
+        const pendingCases = await caseModel_1.default.find({ _id: { $in: pendingCaseIds } }).select('_id caseNo parties').lean();
         const pendingCaseMap = new Map(pendingCases.map((c) => [String(c._id), c]));
         const pendingFollowUp = pendingTasks.map((t) => {
             const c = pendingCaseMap.get(String(t.caseId));
@@ -100,7 +90,7 @@ const getExecutiveAssistantDashboard = (req, res) => __awaiter(void 0, void 0, v
         // ----------------------------
         // Recent cases (last 5)
         // ----------------------------
-        const recent = yield caseModel_1.default.find().sort({ createdAt: -1 }).limit(5).lean();
+        const recent = await caseModel_1.default.find().sort({ createdAt: -1 }).limit(5).lean();
         const recentCases = recent.map((c) => ({
             id: String(c._id),
             name: c.caseNo || c.parties || '—',
@@ -128,8 +118,8 @@ const getExecutiveAssistantDashboard = (req, res) => __awaiter(void 0, void 0, v
         });
     }
     catch (e) {
-        res.status(500).json({ message: (e === null || e === void 0 ? void 0 : e.message) || 'Failed to load executive assistant dashboard.' });
+        res.status(500).json({ message: e?.message || 'Failed to load executive assistant dashboard.' });
     }
-});
+};
 exports.getExecutiveAssistantDashboard = getExecutiveAssistantDashboard;
 //# sourceMappingURL=dashboardController.js.map

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -39,6 +39,7 @@ type NavItem = {
 export default function DashboardLayout({ user, onLogout, children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
+  const topbarRef = useRef<HTMLElement | null>(null);
   const location = useLocation();
   const { isDark, toggleTheme } = useTheme();
 
@@ -93,6 +94,20 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
     refreshUnreadCount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
+
+  useEffect(() => {
+    const updateTopbarHeight = () => {
+      const height = topbarRef.current?.offsetHeight ?? 64;
+      document.documentElement.style.setProperty('--topbar-height', `${height}px`);
+    };
+
+    updateTopbarHeight();
+    window.addEventListener('resize', updateTopbarHeight);
+
+    return () => {
+      window.removeEventListener('resize', updateTopbarHeight);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -202,7 +217,10 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
       {/* Main Content */}
       <div className="lg:pl-64">
         {/* Top Header */}
-        <header className="fixed top-0 left-0 right-0 lg:left-64 h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-4 lg:px-6 z-30">
+        <header
+          ref={topbarRef}
+          className="topbar fixed top-0 left-0 right-0 lg:left-64 h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-4 lg:px-6 z-30"
+        >
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="lg:hidden p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
@@ -236,7 +254,9 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
           </div>
         </header>
 
-        <main className="p-4 lg:p-6 pt-20 bg-gray-50 dark:bg-gray-900 min-h-screen">{children}</main>
+        <main className="main-content px-4 pb-4 lg:px-6 lg:pb-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
+          {children}
+        </main>
       </div>
     </div>
   );

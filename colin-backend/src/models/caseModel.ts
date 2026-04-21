@@ -9,6 +9,11 @@ export interface IClientContact {
   isPrimary?: boolean;
 }
 
+export interface ILegalServicePathItem {
+  id: string;
+  label: string;
+}
+
 export interface ICaseReportingSettings {
   weeklyEnabled?: boolean;
   monthlyEnabled?: boolean;
@@ -27,6 +32,7 @@ export interface ICase extends Document {
   assignedTo: string;
 
   description?: string;
+  legalServicePath?: ILegalServicePathItem[];
   workflow?: string;
   estimatedDuration?: string;
   budget?: string;
@@ -65,6 +71,14 @@ const ClientContactSchema = new Schema<IClientContact>(
   { _id: false }
 );
 
+const LegalServicePathItemSchema = new Schema<ILegalServicePathItem>(
+  {
+    id: { type: String, required: true, trim: true },
+    label: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+);
+
 const CaseSchema = new Schema<ICase>(
   {
     caseNo: { type: String, required: true, trim: true },
@@ -83,6 +97,7 @@ const CaseSchema = new Schema<ICase>(
     assignedTo: { type: String, required: true, trim: true },
 
     description: { type: String },
+    legalServicePath: { type: [LegalServicePathItemSchema], default: [] },
     workflow: { type: String },
     estimatedDuration: { type: String },
     budget: { type: String },

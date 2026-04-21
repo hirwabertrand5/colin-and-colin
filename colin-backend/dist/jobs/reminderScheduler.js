@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -33,7 +24,7 @@ const uniq = (arr) => Array.from(new Set(arr));
  * Runs reminder scans and creates notifications/emails.
  * Safe to call repeatedly because notifyService uses dedupeKey.
  */
-const runReminderScan = () => __awaiter(void 0, void 0, void 0, function* () {
+const runReminderScan = async () => {
     const now = new Date();
     // -----------------------------
     // Task due reminders (24h before due date)
@@ -41,7 +32,7 @@ const runReminderScan = () => __awaiter(void 0, void 0, void 0, function* () {
     // -----------------------------
     const tomorrowISO = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
     // Only remind not completed
-    const tasksDueTomorrow = yield taskModel_1.default.find({
+    const tasksDueTomorrow = await taskModel_1.default.find({
         status: { $ne: 'Completed' },
         dueDate: tomorrowISO,
     })
@@ -51,11 +42,11 @@ const runReminderScan = () => __awaiter(void 0, void 0, void 0, function* () {
         const assignee = String(t.assignee || '').trim();
         if (!assignee)
             continue;
-        const user = yield (0, notifyService_1.findUserByAssigneeString)(assignee);
-        if (!(user === null || user === void 0 ? void 0 : user._id) || user.isActive === false)
+        const user = await (0, notifyService_1.findUserByAssigneeString)(assignee);
+        if (!user?._id || user.isActive === false)
             continue;
         const dedupeKey = `TASK_DUE_24H:${String(t._id)}:${String(user._id)}:${tomorrowISO}`;
-        yield (0, notifyService_1.notifyUsersById)({
+        await (0, notifyService_1.notifyUsersById)({
             userIds: [String(user._id)],
             category: 'deadlines',
             notification: {
@@ -85,7 +76,7 @@ const runReminderScan = () => __awaiter(void 0, void 0, void 0, function* () {
     //   - MD + Executive Assistant (roles)
     // -----------------------------
     // We look ahead 25h to include slight cron jitter, and dedupe.
-    const eventsUpcoming = yield eventModel_1.default.find({
+    const eventsUpcoming = await eventModel_1.default.find({
         // naive range: today -> tomorrow + 1 day
         date: { $gte: isoDate(now), $lte: isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2)) },
     })
@@ -102,15 +93,15 @@ const runReminderScan = () => __awaiter(void 0, void 0, void 0, function* () {
             if (hoursTo < h - 0.25 || hoursTo > h + 0.25)
                 continue;
             // Get case to find assignedTo
-            const c = yield caseModel_1.default.findById(e.caseId).select('assignedTo caseNo parties').lean();
-            const caseLabel = (c === null || c === void 0 ? void 0 : c.caseNo) || (c === null || c === void 0 ? void 0 : c.parties) || '';
+            const c = await caseModel_1.default.findById(e.caseId).select('assignedTo caseNo parties').lean();
+            const caseLabel = c?.caseNo || c?.parties || '';
             // A) Case assignedTo
-            const assignedTo = String((c === null || c === void 0 ? void 0 : c.assignedTo) || '').trim();
+            const assignedTo = String(c?.assignedTo || '').trim();
             if (assignedTo) {
-                const u = yield (0, notifyService_1.findUserByAssigneeString)(assignedTo);
-                if ((u === null || u === void 0 ? void 0 : u._id) && u.isActive !== false) {
+                const u = await (0, notifyService_1.findUserByAssigneeString)(assignedTo);
+                if (u?._id && u.isActive !== false) {
                     const dedupeKey = `EVENT_${h}H:${String(e._id)}:${String(u._id)}`;
-                    yield (0, notifyService_1.notifyUsersById)({
+                    await (0, notifyService_1.notifyUsersById)({
                         userIds: [String(u._id)],
                         category: 'deadlines',
                         notification: {
@@ -136,7 +127,7 @@ const runReminderScan = () => __awaiter(void 0, void 0, void 0, function* () {
             }
             // B) MD + Exec assistant roles
             const dedupeRoleKey = `EVENT_${h}H:ROLE:${String(e._id)}:${String(e.caseId)}`;
-            yield (0, notifyService_1.notifyRoles)({
+            await (0, notifyService_1.notifyRoles)({
                 roles: ['managing_director', 'executive_assistant'],
                 category: 'deadlines',
                 notification: {
@@ -160,7 +151,7 @@ const runReminderScan = () => __awaiter(void 0, void 0, void 0, function* () {
             });
         }
     }
-});
+};
 exports.runReminderScan = runReminderScan;
 /**
  * Starts the cron job.
@@ -168,17 +159,17 @@ exports.runReminderScan = runReminderScan;
  */
 const startReminderScheduler = () => {
     // every 10 minutes
-    node_cron_1.default.schedule('*/10 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
+    node_cron_1.default.schedule('*/10 * * * *', async () => {
         try {
             // If DB disconnected, skip
             if (mongoose_1.default.connection.readyState !== 1)
                 return;
-            yield (0, exports.runReminderScan)();
+            await (0, exports.runReminderScan)();
         }
         catch (e) {
-            console.error('[reminderScheduler] error:', (e === null || e === void 0 ? void 0 : e.message) || e);
+            console.error('[reminderScheduler] error:', e?.message || e);
         }
-    }));
+    });
     console.log('[reminderScheduler] started (every 10 minutes)');
 };
 exports.startReminderScheduler = startReminderScheduler;

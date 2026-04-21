@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -15,10 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getMyTimeLogSummary = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const taskTimeLogModel_1 = __importDefault(require("../models/taskTimeLogModel"));
-const getMyTimeLogSummary = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+const getMyTimeLogSummary = async (req, res) => {
     try {
-        if (!((_a = req.user) === null || _a === void 0 ? void 0 : _a.id))
+        if (!req.user?.id)
             return res.status(401).json({ message: 'Unauthorized.' });
         const { from, to } = req.query;
         if (!from || !to) {
@@ -32,7 +22,7 @@ const getMyTimeLogSummary = (req, res) => __awaiter(void 0, void 0, void 0, func
         // make "to" inclusive
         toDate.setHours(23, 59, 59, 999);
         const userObjectId = new mongoose_1.default.Types.ObjectId(req.user.id);
-        const agg = yield taskTimeLogModel_1.default.aggregate([
+        const agg = await taskTimeLogModel_1.default.aggregate([
             {
                 $match: {
                     userId: userObjectId,
@@ -46,12 +36,12 @@ const getMyTimeLogSummary = (req, res) => __awaiter(void 0, void 0, void 0, func
                 },
             },
         ]);
-        const totalHours = ((_b = agg === null || agg === void 0 ? void 0 : agg[0]) === null || _b === void 0 ? void 0 : _b.totalHours) ? Number(agg[0].totalHours) : 0;
+        const totalHours = agg?.[0]?.totalHours ? Number(agg[0].totalHours) : 0;
         res.json({ totalHours: Math.round(totalHours * 10) / 10 });
     }
-    catch (_c) {
+    catch {
         res.status(500).json({ message: 'Failed to compute time log summary.' });
     }
-});
+};
 exports.getMyTimeLogSummary = getMyTimeLogSummary;
 //# sourceMappingURL=timeLogController.js.map

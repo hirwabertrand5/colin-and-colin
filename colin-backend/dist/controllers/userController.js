@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -15,20 +6,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteUser = exports.updateUser = exports.setUserActiveStatus = exports.resetUserPassword = exports.addUser = exports.getStaffUsers = exports.getAllUsers = void 0;
 const userModel_js_1 = __importDefault(require("../models/userModel.js"));
 // Get all users (excluding passwordHash)
-const getAllUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getAllUsers = async (req, res) => {
     try {
-        const users = yield userModel_js_1.default.find({}, '-passwordHash -__v');
+        const users = await userModel_js_1.default.find({}, '-passwordHash -__v');
         res.json(users);
     }
     catch (error) {
         res.status(500).json({ message: 'Failed to fetch users.' });
     }
-});
+};
 exports.getAllUsers = getAllUsers;
 // ✅ NEW: Get active staff users for assignment dropdown
-const getStaffUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getStaffUsers = async (req, res) => {
     try {
-        const staff = yield userModel_js_1.default.find({
+        const staff = await userModel_js_1.default.find({
             isActive: true,
             role: {
                 $in: [
@@ -46,13 +37,13 @@ const getStaffUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     catch (error) {
         res.status(500).json({ message: 'Failed to fetch staff users.' });
     }
-});
+};
 exports.getStaffUsers = getStaffUsers;
 // Add new user
-const addUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const addUser = async (req, res) => {
     try {
         const { name, email, role, password } = req.body;
-        const userExists = yield userModel_js_1.default.findOne({ email });
+        const userExists = await userModel_js_1.default.findOne({ email });
         if (userExists) {
             return res.status(400).json({ message: 'User already exists.' });
         }
@@ -64,7 +55,7 @@ const addUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             isActive: true,
             loginAttempts: 0,
         });
-        yield user.save();
+        await user.save();
         res.status(201).json({
             message: 'User created successfully.',
             _id: user._id,
@@ -77,30 +68,30 @@ const addUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     catch (error) {
         res.status(500).json({ message: 'Failed to create user.' });
     }
-});
+};
 exports.addUser = addUser;
 // Reset user password
-const resetUserPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const resetUserPassword = async (req, res) => {
     try {
         const { userId, newPassword } = req.body;
-        const user = yield userModel_js_1.default.findById(userId);
+        const user = await userModel_js_1.default.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found.' });
         }
         user.passwordHash = newPassword;
-        yield user.save();
+        await user.save();
         res.json({ message: 'Password reset successfully.' });
     }
     catch (error) {
         res.status(500).json({ message: 'Failed to reset password.' });
     }
-});
+};
 exports.resetUserPassword = resetUserPassword;
 // Toggle user active status
-const setUserActiveStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const setUserActiveStatus = async (req, res) => {
     try {
         const { userId, isActive } = req.body;
-        const user = yield userModel_js_1.default.findByIdAndUpdate(userId, { isActive }, { new: true });
+        const user = await userModel_js_1.default.findByIdAndUpdate(userId, { isActive }, { new: true });
         if (!user) {
             return res.status(404).json({ message: 'User not found.' });
         }
@@ -112,14 +103,14 @@ const setUserActiveStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
     catch (error) {
         res.status(500).json({ message: 'Failed to update user status.' });
     }
-});
+};
 exports.setUserActiveStatus = setUserActiveStatus;
 // Update user
-const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const updateUser = async (req, res) => {
     try {
         const { id } = req.params;
         const { name, email, role } = req.body;
-        const user = yield userModel_js_1.default.findByIdAndUpdate(id, { name, email, role }, { new: true });
+        const user = await userModel_js_1.default.findByIdAndUpdate(id, { name, email, role }, { new: true });
         if (!user)
             return res.status(404).json({ message: 'User not found.' });
         res.json(user);
@@ -127,13 +118,13 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     catch (error) {
         res.status(500).json({ message: 'Failed to update user.' });
     }
-});
+};
 exports.updateUser = updateUser;
 // Delete user
-const deleteUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const deleteUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const user = yield userModel_js_1.default.findByIdAndDelete(id);
+        const user = await userModel_js_1.default.findByIdAndDelete(id);
         if (!user)
             return res.status(404).json({ message: 'User not found.' });
         res.json({ message: 'User deleted successfully.' });
@@ -141,6 +132,6 @@ const deleteUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     catch (error) {
         res.status(500).json({ message: 'Failed to delete user.' });
     }
-});
+};
 exports.deleteUser = deleteUser;
 //# sourceMappingURL=userController.js.map

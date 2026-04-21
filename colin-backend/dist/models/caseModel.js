@@ -40,6 +40,10 @@ const ClientContactSchema = new mongoose_1.Schema({
     phone: { type: String, trim: true },
     isPrimary: { type: Boolean, default: false },
 }, { _id: false });
+const LegalServicePathItemSchema = new mongoose_1.Schema({
+    id: { type: String, required: true, trim: true },
+    label: { type: String, required: true, trim: true },
+}, { _id: false });
 const CaseSchema = new mongoose_1.Schema({
     caseNo: { type: String, required: true, trim: true },
     parties: { type: String, required: true, trim: true },
@@ -53,6 +57,7 @@ const CaseSchema = new mongoose_1.Schema({
     priority: { type: String, default: 'Medium', trim: true },
     assignedTo: { type: String, required: true, trim: true },
     description: { type: String },
+    legalServicePath: { type: [LegalServicePathItemSchema], default: [] },
     workflow: { type: String },
     estimatedDuration: { type: String },
     budget: { type: String },

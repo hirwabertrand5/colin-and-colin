@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { createCase, CaseData, CaseType } from '../../services/caseService';
 import { listActiveWorkflowTemplates, WorkflowTemplate } from '../../services/workflowService';
+import { LEGAL_SERVICES_TREE, ServiceNode } from '../../constants/legalServicesTree';
 
 type StaffUser = {
   _id: string;
@@ -11,8 +12,10 @@ type StaffUser = {
   role: string;
 };
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5000/api';
 const getToken = () => localStorage.getItem('token');
+
+const SERVICE_LEVEL_LABELS = ['Legal Service', 'Category', 'Practice Area', 'Service Line', 'Sub-category', 'Detail'];
 
 export default function CreateCase() {
   const navigate = useNavigate();
@@ -27,21 +30,23 @@ export default function CreateCase() {
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
 
+  const [servicePath, setServicePath] = useState<string[]>([]);
+
   const [formData, setFormData] = useState<CaseData>({
     caseNo: '',
     parties: '',
+    // ✅ will be auto-set by decision tree
     caseType: 'Transactional Cases' as CaseType,
     status: 'On Boarding',
     priority: 'Medium',
     assignedTo: '',
     description: '',
+    legalServicePath: [],
     workflow: '',
     estimatedDuration: '',
     budget: '',
     workflowTemplateId: '',
   });
-
-  const caseTypes: CaseType[] = ['Transactional Cases', 'Litigation Cases', 'Labor Cases'];
 
   const statuses = [
     'On Boarding',
@@ -108,6 +113,108 @@ export default function CreateCase() {
     setFormData({ ...formData, [field]: value });
   };
 
+  // -------------------------
+  // Decision Tree helpers
+  // -------------------------
+  const findNode = (nodes: ServiceNode[], id: string) => nodes.find((node) => node.id === id);
+
+  const selectedServiceNodes = useMemo(() => {
+    const nodes: ServiceNode[] = [];
+    let currentNodes = LEGAL_SERVICES_TREE;
+
+    for (const id of servicePath) {
+      const match = findNode(currentNodes, id);
+      if (!match) break;
+      nodes.push(match);
+      currentNodes = match.children || [];
+    }
+
+    return nodes;
+  }, [servicePath]);
+
+  const serviceLevels = useMemo(() => {
+    const levels: Array<{
+      label: string;
+      options: ServiceNode[];
+      value: string;
+      placeholder: string;
+    }> = [];
+
+    let currentOptions = LEGAL_SERVICES_TREE;
+    let depth = 0;
+
+    while (currentOptions.length > 0) {
+      levels.push({
+        label: SERVICE_LEVEL_LABELS[depth] || `Level ${depth + 1}`,
+        options: currentOptions,
+        value: servicePath[depth] || '',
+        placeholder: depth === 0 ? 'Select...' : `Select ${SERVICE_LEVEL_LABELS[depth - 1].toLowerCase()} first`,
+      });
+
+      const selectedNode = servicePath[depth] ? findNode(currentOptions, servicePath[depth]) : undefined;
+      if (!selectedNode?.children?.length) break;
+
+      currentOptions = selectedNode.children;
+      depth += 1;
+    }
+
+    return levels;
+  }, [servicePath]);
+
+  const updateServicePathAtLevel = (levelIndex: number, value: string) => {
+    setServicePath((prev) => {
+      const next = prev.slice(0, levelIndex);
+      if (value) next[levelIndex] = value;
+      return next;
+    });
+  };
+
+  const resolveCaseTypeFromSelection = (nodes: ServiceNode[]): CaseType | null => {
+    for (let i = nodes.length - 1; i >= 0; i -= 1) {
+      if (nodes[i].caseType) return nodes[i].caseType as CaseType;
+    }
+    return null;
+  };
+
+  const resolveSuggestedMatterType = (nodes: ServiceNode[]): string | null => {
+    for (let i = nodes.length - 1; i >= 0; i -= 1) {
+      const suggested = nodes[i].suggestedMatterTypes?.[0];
+      if (suggested) return suggested;
+    }
+    return null;
+  };
+
+  // Keep formData.caseType always in sync with tree selection
+  useEffect(() => {
+    const ct = resolveCaseTypeFromSelection(selectedServiceNodes);
+    const suggested = resolveSuggestedMatterType(selectedServiceNodes);
+    const legalServicePath = selectedServiceNodes.map((node) => ({ id: node.id, label: node.label }));
+
+    setFormData((prev) => ({
+      ...prev,
+      caseType: ct || prev.caseType,
+      workflow: suggested || prev.workflow,
+      legalServicePath,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedServiceNodes]);
+
+  const computedCaseType = useMemo(
+    () => resolveCaseTypeFromSelection(selectedServiceNodes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedServiceNodes]
+  );
+
+  const selectedServicePathLabel = useMemo(
+    () => selectedServiceNodes.map((node) => node.label).join(' -> '),
+    [selectedServiceNodes]
+  );
+
+  const isServiceSelectionValid = () => {
+    // Require at least a selection that yields a caseType
+    return Boolean(computedCaseType);
+  };
+
   const handleNext = () => {
     if (step < 3) setStep(step + 1);
   };
@@ -121,6 +228,11 @@ export default function CreateCase() {
     setError('');
     setSuccess('');
     try {
+      // final safety: ensure caseType set
+      if (!formData.caseType) {
+        throw new Error('Missing case type. Please complete Legal Service classification.');
+      }
+
       await createCase(formData);
       setSuccess('Case created successfully!');
       setTimeout(() => navigate('/cases'), 1000);
@@ -133,7 +245,7 @@ export default function CreateCase() {
 
   const canProceed = () => {
     if (step === 1) {
-      return formData.caseNo && formData.parties && formData.caseType && formData.assignedTo;
+      return Boolean(formData.caseNo && formData.parties && formData.assignedTo && isServiceSelectionValid());
     }
     if (step === 2) {
       return Boolean(formData.workflowTemplateId);
@@ -227,37 +339,71 @@ export default function CreateCase() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Case Type *</label>
-                <select
-                  value={formData.caseType}
-                  onChange={(e) => handleInputChange('caseType', e.target.value as CaseType)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
-                >
-                  {caseTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  This is the firm classification. Workflow template can auto-suggest this.
-                </p>
+            {/* ✅ Decision Tree */}
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <div className="text-sm font-semibold text-gray-900 mb-3">Legal Service Classification *</div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {serviceLevels.map((level, index) => (
+                  <div key={`${level.label}-${index}`}>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{level.label}</label>
+                    <select
+                      value={level.value}
+                      onChange={(e) => updateServicePathAtLevel(index, e.target.value)}
+                      disabled={index > 0 && !servicePath[index - 1]}
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 disabled:opacity-60"
+                    >
+                      <option value="">{index === 0 || servicePath[index - 1] ? 'Select...' : level.placeholder}</option>
+                      {level.options.map((node) => (
+                        <option key={node.id} value={node.id}>
+                          {node.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Priority *</label>
-                <select
-                  value={formData.priority}
-                  onChange={(e) => handleInputChange('priority', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                </select>
+              {/* ✅ Computed Case Type (read-only, automatic) */}
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Computed Case Type</label>
+                  <input
+                    value={computedCaseType || ''}
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-gray-100 text-gray-900"
+                    placeholder="Select legal service to compute case type"
+                  />
+                  {!computedCaseType && (
+                    <p className="text-xs text-red-600 mt-2">Please select a legal service path to continue.</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority *</label>
+                  <select
+                    value={formData.priority}
+                    onChange={(e) => handleInputChange('priority', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                  </select>
+                </div>
               </div>
+
+              {formData.workflow ? (
+                <p className="text-xs text-gray-600 mt-3">
+                  Suggested matter type: <span className="font-medium">{formData.workflow}</span>
+                </p>
+              ) : null}
+
+              {selectedServicePathLabel ? (
+                <p className="text-xs text-gray-600 mt-2">
+                  Selected path: <span className="font-medium">{selectedServicePathLabel}</span>
+                </p>
+              ) : null}
             </div>
 
             <div>
@@ -313,7 +459,6 @@ export default function CreateCase() {
               </select>
             </div>
 
-            {/* ✅ Workflow Template */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">Workflow Template *</label>
               <select
@@ -325,6 +470,7 @@ export default function CreateCase() {
                   setFormData((prev) => ({
                     ...prev,
                     workflowTemplateId: templateId,
+                    // ✅ keep synchronized with template
                     caseType: (t?.caseType as CaseType) || prev.caseType,
                     workflow: t?.matterType || prev.workflow,
                   }));
@@ -332,15 +478,14 @@ export default function CreateCase() {
                 className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
                 disabled={templatesLoading}
               >
-                <option value="">
-                  {templatesLoading ? 'Loading templates...' : 'Select workflow template'}
-                </option>
+                <option value="">{templatesLoading ? 'Loading templates...' : 'Select workflow template'}</option>
                 {templates.map((t) => (
                   <option key={t._id} value={t._id}>
                     {t.matterType} (v{t.version})
                   </option>
                 ))}
               </select>
+
               <p className="text-xs text-gray-500 mt-2">
                 Selecting a workflow template will generate SOP steps and required deliverables for this case.
               </p>
@@ -381,7 +526,8 @@ export default function CreateCase() {
                 {[
                   ['Case No.', formData.caseNo],
                   ['Parties', formData.parties],
-                  ['Case Type', formData.caseType],
+                  ['Legal Service Path', formData.legalServicePath?.map((item) => item.label).join(' -> ') || 'Not selected'],
+                  ['Case Type (computed)', formData.caseType],
                   ['Assigned To', formData.assignedTo],
                   ['Priority', formData.priority],
                   ['Status', formData.status],

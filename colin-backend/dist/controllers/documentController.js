@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -28,32 +19,28 @@ const storage = multer_1.default.diskStorage({
     },
 });
 exports.upload = (0, multer_1.default)({ storage });
-const actorFromReq = (req) => {
-    var _a, _b;
-    return ({
-        actorName: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.name) || 'System',
-        actorUserId: (_b = req.user) === null || _b === void 0 ? void 0 : _b.id,
-    });
-};
-const getDocumentsForCase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const actorFromReq = (req) => ({
+    actorName: req.user?.name || 'System',
+    actorUserId: req.user?.id,
+});
+const getDocumentsForCase = async (req, res) => {
     try {
         let caseId = req.params.caseId;
         if (Array.isArray(caseId))
             caseId = caseId[0];
         if (!caseId)
             return res.status(400).json({ message: 'Missing caseId' });
-        const documents = yield documentModel_1.default.find({
+        const documents = await documentModel_1.default.find({
             caseId: new mongoose_1.default.Types.ObjectId(caseId),
         }).sort({ uploadedDate: -1 });
         res.json(documents);
     }
-    catch (_a) {
+    catch {
         res.status(500).json({ message: 'Failed to fetch documents.' });
     }
-});
+};
 exports.getDocumentsForCase = getDocumentsForCase;
-const addDocumentToCase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+const addDocumentToCase = async (req, res) => {
     try {
         let caseId = req.params.caseId;
         if (Array.isArray(caseId))
@@ -62,7 +49,7 @@ const addDocumentToCase = (req, res) => __awaiter(void 0, void 0, void 0, functi
             return res.status(400).json({ message: 'Missing caseId' });
         if (!req.file)
             return res.status(400).json({ message: 'No file uploaded' });
-        const userName = ((_a = req.user) === null || _a === void 0 ? void 0 : _a.name) || 'Unknown';
+        const userName = req.user?.name || 'Unknown';
         const newDoc = new documentModel_1.default({
             caseId: new mongoose_1.default.Types.ObjectId(caseId),
             name: req.body.name,
@@ -77,33 +64,47 @@ const addDocumentToCase = (req, res) => __awaiter(void 0, void 0, void 0, functi
             size: (req.file.size / 1024 / 1024).toFixed(2) + ' MB',
             url: `/uploads/${req.file.filename}`,
         });
-        yield newDoc.save();
+        await newDoc.save();
         const actor = actorFromReq(req);
-        yield (0, auditService_1.writeAudit)(Object.assign(Object.assign({ caseId, actorName: actor.actorName }, (actor.actorUserId ? { actorUserId: actor.actorUserId } : {})), { action: 'DOCUMENT_UPLOADED', message: 'Uploaded document', detail: `${newDoc.name || 'Untitled'}${newDoc.stepKey ? ` • Step: ${newDoc.stepKey}` : ''}${newDoc.outputKey ? ` • Output: ${newDoc.outputKey}` : ''}` }));
+        await (0, auditService_1.writeAudit)({
+            caseId,
+            actorName: actor.actorName,
+            ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
+            action: 'DOCUMENT_UPLOADED',
+            message: 'Uploaded document',
+            detail: `${newDoc.name || 'Untitled'}${newDoc.stepKey ? ` • Step: ${newDoc.stepKey}` : ''}${newDoc.outputKey ? ` • Output: ${newDoc.outputKey}` : ''}`,
+        });
         res.status(201).json(newDoc);
     }
-    catch (_b) {
+    catch {
         res.status(500).json({ message: 'Failed to create document.' });
     }
-});
+};
 exports.addDocumentToCase = addDocumentToCase;
-const deleteDocument = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const deleteDocument = async (req, res) => {
     try {
         let docId = req.params.docId;
         if (Array.isArray(docId))
             docId = docId[0];
         if (!docId)
             return res.status(400).json({ message: 'Missing docId' });
-        const deleted = yield documentModel_1.default.findByIdAndDelete(docId);
+        const deleted = await documentModel_1.default.findByIdAndDelete(docId);
         if (!deleted)
             return res.status(404).json({ message: 'Document not found.' });
         const actor = actorFromReq(req);
-        yield (0, auditService_1.writeAudit)(Object.assign(Object.assign({ caseId: String(deleted.caseId), actorName: actor.actorName }, (actor.actorUserId ? { actorUserId: actor.actorUserId } : {})), { action: 'DOCUMENT_DELETED', message: 'Deleted document', detail: `${deleted.name || 'Untitled'}` }));
+        await (0, auditService_1.writeAudit)({
+            caseId: String(deleted.caseId),
+            actorName: actor.actorName,
+            ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
+            action: 'DOCUMENT_DELETED',
+            message: 'Deleted document',
+            detail: `${deleted.name || 'Untitled'}`,
+        });
         res.json({ message: 'Document deleted.' });
     }
-    catch (_a) {
+    catch {
         res.status(500).json({ message: 'Failed to delete document.' });
     }
-});
+};
 exports.deleteDocument = deleteDocument;
 //# sourceMappingURL=documentController.js.map

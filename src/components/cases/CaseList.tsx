@@ -12,11 +12,14 @@ interface CaseListProps {
 const isAssociateLike = (role: UserRole) => role === 'associate' || role === 'lawyer' || role === 'intern';
 
 export default function CaseList({ userRole }: CaseListProps) {
+  const CASES_PER_PAGE = 10;
+
   usePageTitle('Cases');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [cases, setCases] = useState<CaseData[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -89,6 +92,20 @@ export default function CaseList({ userRole }: CaseListProps) {
 
     return matchesSearch && matchesFilter;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredCases.length / CASES_PER_PAGE));
+  const paginatedCases = filteredCases.slice(
+    (currentPage - 1) * CASES_PER_PAGE,
+    currentPage * CASES_PER_PAGE
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatus]);
+
+  useEffect(() => {
+    setCurrentPage((prev) => Math.min(prev, totalPages));
+  }, [totalPages]);
 
   return (
     <div>
@@ -191,9 +208,11 @@ export default function CaseList({ userRole }: CaseListProps) {
             </thead>
 
             <tbody className="divide-y divide-gray-200">
-              {filteredCases.map((item, index) => (
+              {paginatedCases.map((item, index) => (
                 <tr key={item._id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-5 text-sm text-gray-500">{index + 1}</td>
+                  <td className="px-6 py-5 text-sm text-gray-500">
+                    {(currentPage - 1) * CASES_PER_PAGE + index + 1}
+                  </td>
                   <td className="px-6 py-5 text-sm font-medium text-gray-900">{item.caseNo}</td>
                   <td className="px-6 py-5 text-sm text-gray-900">{item.parties}</td>
                   <td className="px-6 py-5 text-sm text-gray-600">{item.caseType}</td>
@@ -237,6 +256,37 @@ export default function CaseList({ userRole }: CaseListProps) {
           <div className="text-center py-12">
             <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500">No cases found</p>
+          </div>
+        )}
+
+        {!loading && filteredCases.length > 0 && (
+          <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4">
+            <p className="text-sm text-gray-600">
+              Showing {(currentPage - 1) * CASES_PER_PAGE + 1}-
+              {Math.min(currentPage * CASES_PER_PAGE, filteredCases.length)} of {filteredCases.length} cases
+            </p>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>

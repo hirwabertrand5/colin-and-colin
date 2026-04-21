@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -18,69 +9,63 @@ const taskModel_1 = __importDefault(require("../models/taskModel"));
 const auditService_1 = require("../services/auditService");
 const workflowTemplateModel_1 = __importDefault(require("../models/workflowTemplateModel"));
 const workflowInstanceModel_1 = __importDefault(require("../models/workflowInstanceModel"));
-const actorFromReq = (req) => {
-    var _a, _b;
-    return ({
-        actorName: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.name) || 'System',
-        actorUserId: (_b = req.user) === null || _b === void 0 ? void 0 : _b.id,
-    });
-};
+const actorFromReq = (req) => ({
+    actorName: req.user?.name || 'System',
+    actorUserId: req.user?.id,
+});
 const isAdminCaseRole = (role) => role === 'managing_director' || role === 'executive_assistant';
 const isAssociateLikeRole = (role) => role === 'associate' || role === 'lawyer' || role === 'intern';
-const canAssociateLikeAccessCase = (req, foundCase) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
-    if (!isAssociateLikeRole((_a = req.user) === null || _a === void 0 ? void 0 : _a.role))
+const canAssociateLikeAccessCase = async (req, foundCase) => {
+    if (!isAssociateLikeRole(req.user?.role))
         return false;
-    const me = (((_b = req.user) === null || _b === void 0 ? void 0 : _b.name) || '').trim();
+    const me = (req.user?.name || '').trim();
     if (!me)
         return false;
     const assignedTo = String(foundCase.assignedTo || '').trim();
     if (assignedTo && assignedTo === me)
         return true;
-    const hasTask = yield taskModel_1.default.exists({
+    const hasTask = await taskModel_1.default.exists({
         caseId: foundCase._id,
         assignee: me,
     });
     return Boolean(hasTask);
-});
-const getAllCases = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+};
+const getAllCases = async (req, res) => {
     try {
-        const role = (_a = req.user) === null || _a === void 0 ? void 0 : _a.role;
+        const role = req.user?.role;
         if (isAdminCaseRole(role)) {
-            const cases = yield caseModel_1.default.find().sort({ updatedAt: -1 });
+            const cases = await caseModel_1.default.find().sort({ updatedAt: -1 });
             return res.json(cases);
         }
         if (isAssociateLikeRole(role)) {
-            const me = (((_b = req.user) === null || _b === void 0 ? void 0 : _b.name) || '').trim();
+            const me = (req.user?.name || '').trim();
             if (!me)
                 return res.json([]);
-            const assignedCases = yield caseModel_1.default.find({ assignedTo: me }).sort({ updatedAt: -1 });
-            const taskCaseIds = yield taskModel_1.default.distinct('caseId', { assignee: me });
-            const taskCases = yield caseModel_1.default.find({ _id: { $in: taskCaseIds } }).sort({ updatedAt: -1 });
+            const assignedCases = await caseModel_1.default.find({ assignedTo: me }).sort({ updatedAt: -1 });
+            const taskCaseIds = await taskModel_1.default.distinct('caseId', { assignee: me });
+            const taskCases = await caseModel_1.default.find({ _id: { $in: taskCaseIds } }).sort({ updatedAt: -1 });
             const map = new Map();
             [...assignedCases, ...taskCases].forEach((c) => map.set(String(c._id), c));
             return res.json(Array.from(map.values()));
         }
         return res.status(403).json({ message: 'Forbidden.' });
     }
-    catch (_c) {
+    catch {
         return res.status(500).json({ message: 'Failed to fetch cases.' });
     }
-});
+};
 exports.getAllCases = getAllCases;
-const createCase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+const createCase = async (req, res) => {
     try {
-        if (!isAdminCaseRole((_a = req.user) === null || _a === void 0 ? void 0 : _a.role)) {
+        if (!isAdminCaseRole(req.user?.role)) {
             return res.status(403).json({ message: 'Forbidden.' });
         }
         const newCase = new caseModel_1.default(req.body);
-        yield newCase.save();
+        await newCase.save();
         // ✅ Initialize workflow instance if workflowTemplateId provided
-        const workflowTemplateId = (_b = req.body) === null || _b === void 0 ? void 0 : _b.workflowTemplateId;
+        const workflowTemplateId = req.body?.workflowTemplateId;
         if (workflowTemplateId) {
-            const template = yield workflowTemplateModel_1.default.findById(workflowTemplateId).lean();
+            const template = await workflowTemplateModel_1.default.findById(workflowTemplateId).lean();
             if (template) {
                 const steps = (template.steps || [])
                     .slice()
@@ -98,11 +83,11 @@ const createCase = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                         category: o.category,
                     })),
                 }));
-                const inst = yield workflowInstanceModel_1.default.create({
+                const inst = await workflowInstanceModel_1.default.create({
                     caseId: newCase._id,
                     templateId: template._id,
                     status: 'Active',
-                    currentStepKey: (_c = steps[0]) === null || _c === void 0 ? void 0 : _c.stepKey,
+                    currentStepKey: steps[0]?.stepKey,
                     steps,
                 });
                 newCase.workflowTemplateId = template._id;
@@ -113,49 +98,61 @@ const createCase = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                     currentStepKey: inst.currentStepKey,
                     percent: 0,
                 };
-                yield newCase.save();
+                await newCase.save();
                 const actor = actorFromReq(req);
-                yield (0, auditService_1.writeAudit)(Object.assign(Object.assign({ caseId: String(newCase._id), actorName: actor.actorName }, (actor.actorUserId ? { actorUserId: actor.actorUserId } : {})), { action: 'WORKFLOW_INSTANCE_CREATED', message: 'Workflow initialized from template', detail: `${template.name} v${template.version}` }));
+                await (0, auditService_1.writeAudit)({
+                    caseId: String(newCase._id),
+                    actorName: actor.actorName,
+                    ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
+                    action: 'WORKFLOW_INSTANCE_CREATED',
+                    message: 'Workflow initialized from template',
+                    detail: `${template.name} v${template.version}`,
+                });
             }
         }
         const actor = actorFromReq(req);
-        yield (0, auditService_1.writeAudit)(Object.assign(Object.assign({ caseId: String(newCase._id), actorName: actor.actorName }, (actor.actorUserId ? { actorUserId: actor.actorUserId } : {})), { action: 'CASE_CREATED', message: 'Created case', detail: `${newCase.caseNo || ''} • ${newCase.parties || ''}`.trim() }));
+        await (0, auditService_1.writeAudit)({
+            caseId: String(newCase._id),
+            actorName: actor.actorName,
+            ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
+            action: 'CASE_CREATED',
+            message: 'Created case',
+            detail: `${newCase.caseNo || ''} • ${newCase.parties || ''}`.trim(),
+        });
         return res.status(201).json(newCase);
     }
-    catch (_d) {
+    catch {
         return res.status(500).json({ message: 'Failed to create case.' });
     }
-});
+};
 exports.createCase = createCase;
-const getCaseById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+const getCaseById = async (req, res) => {
     try {
-        const foundCase = yield caseModel_1.default.findById(req.params.id);
+        const foundCase = await caseModel_1.default.findById(req.params.id);
         if (!foundCase)
             return res.status(404).json({ message: 'Case not found.' });
-        if (isAdminCaseRole((_a = req.user) === null || _a === void 0 ? void 0 : _a.role)) {
+        if (isAdminCaseRole(req.user?.role)) {
             return res.json(foundCase);
         }
-        if (isAssociateLikeRole((_b = req.user) === null || _b === void 0 ? void 0 : _b.role)) {
-            const allowed = yield canAssociateLikeAccessCase(req, foundCase);
+        if (isAssociateLikeRole(req.user?.role)) {
+            const allowed = await canAssociateLikeAccessCase(req, foundCase);
             if (allowed)
                 return res.json(foundCase);
         }
         return res.status(403).json({ message: 'Forbidden.' });
     }
-    catch (_c) {
+    catch {
         return res.status(500).json({ message: 'Failed to fetch case.' });
     }
-});
+};
 exports.getCaseById = getCaseById;
-const updateCase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+const updateCase = async (req, res) => {
     try {
-        if (!isAdminCaseRole((_a = req.user) === null || _a === void 0 ? void 0 : _a.role)) {
+        if (!isAdminCaseRole(req.user?.role)) {
             return res.status(403).json({ message: 'Forbidden.' });
         }
-        const before = yield caseModel_1.default.findById(req.params.id);
-        const updated = yield caseModel_1.default.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const before = await caseModel_1.default.findById(req.params.id);
+        const updated = await caseModel_1.default.findByIdAndUpdate(req.params.id, req.body, { new: true });
         if (!updated)
             return res.status(404).json({ message: 'Case not found.' });
         const changes = [];
@@ -176,30 +173,38 @@ const updateCase = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 changes.push(`Case type changed`);
             if (req.body.matterType && req.body.matterType !== before.matterType)
                 changes.push(`Matter type changed`);
+            if (req.body.legalServicePath)
+                changes.push(`Legal service classification updated`);
         }
         const actor = actorFromReq(req);
-        yield (0, auditService_1.writeAudit)(Object.assign(Object.assign({ caseId: String(updated._id), actorName: actor.actorName }, (actor.actorUserId ? { actorUserId: actor.actorUserId } : {})), { action: 'CASE_UPDATED', message: 'Updated case', detail: changes.length ? changes.join(' • ') : `${updated.caseNo || ''}`.trim() }));
+        await (0, auditService_1.writeAudit)({
+            caseId: String(updated._id),
+            actorName: actor.actorName,
+            ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
+            action: 'CASE_UPDATED',
+            message: 'Updated case',
+            detail: changes.length ? changes.join(' • ') : `${updated.caseNo || ''}`.trim(),
+        });
         return res.json(updated);
     }
-    catch (_b) {
+    catch {
         return res.status(500).json({ message: 'Failed to update case.' });
     }
-});
+};
 exports.updateCase = updateCase;
-const deleteCase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+const deleteCase = async (req, res) => {
     try {
-        if (((_a = req.user) === null || _a === void 0 ? void 0 : _a.role) !== 'managing_director') {
+        if (req.user?.role !== 'managing_director') {
             return res.status(403).json({ message: 'Forbidden.' });
         }
-        const deleted = yield caseModel_1.default.findByIdAndDelete(req.params.id);
+        const deleted = await caseModel_1.default.findByIdAndDelete(req.params.id);
         if (!deleted)
             return res.status(404).json({ message: 'Case not found.' });
         return res.json({ message: 'Case deleted.' });
     }
-    catch (_b) {
+    catch {
         return res.status(500).json({ message: 'Failed to delete case.' });
     }
-});
+};
 exports.deleteCase = deleteCase;
 //# sourceMappingURL=caseController.js.map

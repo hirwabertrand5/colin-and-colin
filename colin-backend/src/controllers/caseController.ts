@@ -187,6 +187,7 @@ export const updateCase = async (req: AuthRequest, res: Response) => {
       if (req.body.parties && req.body.parties !== before.parties) changes.push(`Parties changed`);
       if (req.body.caseType && req.body.caseType !== before.caseType) changes.push(`Case type changed`);
       if (req.body.matterType && req.body.matterType !== before.matterType) changes.push(`Matter type changed`);
+      if (req.body.legalServicePath) changes.push(`Legal service classification updated`);
     }
 
     const actor = actorFromReq(req);

@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -162,34 +153,33 @@ const buildHtml = (payload) => {
   </div>
   `;
 };
-const listReportsForCase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const listReportsForCase = async (req, res) => {
     try {
         const { caseId } = req.params;
-        const reports = yield clientReportModel_1.default.find({
+        const reports = await clientReportModel_1.default.find({
             caseId: new mongoose_1.default.Types.ObjectId(caseId),
         }).sort({ createdAt: -1 });
         res.json(reports);
     }
-    catch (_a) {
+    catch {
         res.status(500).json({ message: 'Failed to load reports.' });
     }
-});
+};
 exports.listReportsForCase = listReportsForCase;
-const generateReportForCase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+const generateReportForCase = async (req, res) => {
     try {
         const { caseId } = req.params;
         if (!caseId)
             return res.status(400).json({ message: 'Missing caseId' });
-        const c = yield caseModel_1.default.findById(caseId);
+        const c = await caseModel_1.default.findById(caseId);
         if (!c)
             return res.status(404).json({ message: 'Case not found.' });
         const now = new Date();
-        const periodDays = Number(((_a = req.body) === null || _a === void 0 ? void 0 : _a.periodDays) || 30);
+        const periodDays = Number(req.body?.periodDays || 30);
         const periodEnd = now;
         const periodStart = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
         const todayStr = formatDate(now);
-        const [tasks, audit, events, docs] = yield Promise.all([
+        const [tasks, audit, events, docs] = await Promise.all([
             taskModel_1.default.find({ caseId: new mongoose_1.default.Types.ObjectId(caseId) }).sort({ dueDate: 1, createdAt: -1 }).lean(),
             auditLogModel_1.default.find({
                 caseId: new mongoose_1.default.Types.ObjectId(caseId),
@@ -248,37 +238,45 @@ const generateReportForCase = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 size: d.size ? safe(d.size) : undefined,
             })),
         });
-        const report = yield clientReportModel_1.default.create(Object.assign({ caseId: new mongoose_1.default.Types.ObjectId(caseId), trigger: 'manual', status: 'Draft', periodStart,
+        const report = await clientReportModel_1.default.create({
+            caseId: new mongoose_1.default.Types.ObjectId(caseId),
+            trigger: 'manual',
+            status: 'Draft',
+            periodStart,
             periodEnd,
             subject,
-            recipients, contentHtml: html, generatedBy: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.name) || 'System' }, (((_c = req.user) === null || _c === void 0 ? void 0 : _c.id) ? { generatedByUserId: new mongoose_1.default.Types.ObjectId(req.user.id) } : {})));
-        yield caseModel_1.default.findByIdAndUpdate(caseId, { 'reporting.lastGeneratedAt': now });
+            recipients,
+            contentHtml: html,
+            generatedBy: req.user?.name || 'System',
+            ...(req.user?.id ? { generatedByUserId: new mongoose_1.default.Types.ObjectId(req.user.id) } : {}),
+        });
+        await caseModel_1.default.findByIdAndUpdate(caseId, { 'reporting.lastGeneratedAt': now });
         res.status(201).json(report);
     }
     catch (e) {
-        res.status(500).json({ message: (e === null || e === void 0 ? void 0 : e.message) || 'Failed to generate report.' });
+        res.status(500).json({ message: e?.message || 'Failed to generate report.' });
     }
-});
+};
 exports.generateReportForCase = generateReportForCase;
-const getReportById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getReportById = async (req, res) => {
     try {
         const { reportId } = req.params;
-        const report = yield clientReportModel_1.default.findById(reportId);
+        const report = await clientReportModel_1.default.findById(reportId);
         if (!report)
             return res.status(404).json({ message: 'Report not found.' });
         res.json(report);
     }
-    catch (_a) {
+    catch {
         res.status(500).json({ message: 'Failed to load report.' });
     }
-});
+};
 exports.getReportById = getReportById;
 // ✅ NEW: PDF download endpoint (no email)
-const downloadReportPdf = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const downloadReportPdf = async (req, res) => {
     const { reportId } = req.params;
     if (!reportId)
         return res.status(400).json({ message: 'Missing reportId' });
-    const report = yield clientReportModel_1.default.findById(reportId);
+    const report = await clientReportModel_1.default.findById(reportId);
     if (!report)
         return res.status(404).json({ message: 'Report not found.' });
     // Try to build a meaningful filename
@@ -290,11 +288,11 @@ const downloadReportPdf = (req, res) => __awaiter(void 0, void 0, void 0, functi
     const fileName = `${filenameSafe}.pdf`;
     const htmlDoc = wrapHtmlDoc(report.subject || 'Case Report', report.contentHtml || '<div>No content</div>');
     // Render PDF
-    const browser = yield playwright_1.chromium.launch();
+    const browser = await playwright_1.chromium.launch();
     try {
-        const page = yield browser.newPage();
-        yield page.setContent(htmlDoc, { waitUntil: 'networkidle' });
-        const pdfBuffer = yield page.pdf({
+        const page = await browser.newPage();
+        await page.setContent(htmlDoc, { waitUntil: 'networkidle' });
+        const pdfBuffer = await page.pdf({
             format: 'A4',
             printBackground: true,
             margin: { top: '18mm', right: '16mm', bottom: '18mm', left: '16mm' },
@@ -304,8 +302,8 @@ const downloadReportPdf = (req, res) => __awaiter(void 0, void 0, void 0, functi
         res.send(pdfBuffer);
     }
     finally {
-        yield browser.close();
+        await browser.close();
     }
-});
+};
 exports.downloadReportPdf = downloadReportPdf;
 //# sourceMappingURL=clientReportController.js.map
