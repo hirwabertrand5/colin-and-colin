@@ -85,7 +85,7 @@ export default function Calendar({ userRole }: CalendarProps) {
   const subtitle =
     userRole === 'managing_director'
       ? 'View and manage firm-wide legal milestones'
-      : userRole === 'associate'
+      : userRole === 'associate' || userRole === 'junior_associate' || userRole === 'intern' || userRole === 'lawyer'
         ? 'Track your case-specific events and tasks'
         : 'Coordinate scheduling & reminders for all files';
 

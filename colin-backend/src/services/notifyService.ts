@@ -41,7 +41,7 @@ export const createNotification = async (payload: {
     if (exists) return null;
   }
 
-  const doc = await Notification.create({
+  const notificationPayload: any = {
     type: payload.type,
     title: payload.title,
     message: payload.message,
@@ -49,19 +49,17 @@ export const createNotification = async (payload: {
 
     audienceUserIds: (payload.audienceUserIds || []).map((id) => new mongoose.Types.ObjectId(id)),
     audienceRoles: payload.audienceRoles || [],
+  };
+  if (payload.link) notificationPayload.link = payload.link;
+  if (payload.dedupeKey) notificationPayload.dedupeKey = payload.dedupeKey;
+  if (payload.caseId) notificationPayload.caseId = new mongoose.Types.ObjectId(payload.caseId);
+  if (payload.taskId) notificationPayload.taskId = new mongoose.Types.ObjectId(payload.taskId);
+  if (payload.eventId) notificationPayload.eventId = new mongoose.Types.ObjectId(payload.eventId);
+  if (payload.fundId) notificationPayload.fundId = new mongoose.Types.ObjectId(payload.fundId);
+  if (payload.expenseId) notificationPayload.expenseId = new mongoose.Types.ObjectId(payload.expenseId);
 
-    link: payload.link,
-    dedupeKey: payload.dedupeKey,
-
-    caseId: payload.caseId ? new mongoose.Types.ObjectId(payload.caseId) : undefined,
-    taskId: payload.taskId ? new mongoose.Types.ObjectId(payload.taskId) : undefined,
-    eventId: payload.eventId ? new mongoose.Types.ObjectId(payload.eventId) : undefined,
-
-    fundId: payload.fundId ? new mongoose.Types.ObjectId(payload.fundId) : undefined,
-    expenseId: payload.expenseId ? new mongoose.Types.ObjectId(payload.expenseId) : undefined,
-  });
-
-  return doc.toObject();
+  const doc: any = await Notification.create(notificationPayload);
+  return typeof doc?.toObject === 'function' ? doc.toObject() : doc;
 };
 
 const ensurePrefsExist = async (userIds: string[]) => {

@@ -43,7 +43,9 @@ const listHelpArticles = async (req, res) => {
 exports.listHelpArticles = listHelpArticles;
 const getHelpArticleById = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        if (!id)
+            return res.status(400).json({ message: 'Missing article id.' });
         const item = await helpArticleModel_1.default.findOne({ _id: id, isPublished: true }).lean();
         if (!item)
             return res.status(404).json({ message: 'Article not found.' });

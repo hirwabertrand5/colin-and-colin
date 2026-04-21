@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteUser = exports.updateUser = exports.setUserActiveStatus = exports.resetUserPassword = exports.addUser = exports.getStaffUsers = exports.getAllUsers = void 0;
 const userModel_js_1 = __importDefault(require("../models/userModel.js"));
+const ASSOCIATE_ASSIGNABLE_ROLES = ['junior_associate', 'intern'];
 // Get all users (excluding passwordHash)
 const getAllUsers = async (req, res) => {
     try {
@@ -19,17 +20,21 @@ exports.getAllUsers = getAllUsers;
 // ✅ NEW: Get active staff users for assignment dropdown
 const getStaffUsers = async (req, res) => {
     try {
+        const allowedRoles = req.user?.role === 'associate'
+            ? ASSOCIATE_ASSIGNABLE_ROLES
+            : [
+                'managing_director',
+                'lawyer',
+                'associate',
+                'junior_associate',
+                'assistant',
+                'executive_assistant',
+                'intern',
+            ];
         const staff = await userModel_js_1.default.find({
             isActive: true,
             role: {
-                $in: [
-                    'managing_director',
-                    'lawyer',
-                    'associate',
-                    'assistant',
-                    'executive_assistant',
-                    'intern',
-                ],
+                $in: allowedRoles,
             },
         }, 'name email role isActive').sort({ name: 1 });
         res.json(staff);

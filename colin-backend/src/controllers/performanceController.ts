@@ -56,7 +56,7 @@ const getUserScopeFilter = (req: AuthRequest, userName: string) => {
   // In your system tasks are scoped by assignee name (MVP).
   // MD can query anyone; others can query only self.
   if (req.user?.role === 'managing_director') return { assignee: userName };
-  return { assignee: req.user?.name };
+  return { assignee: req.user?.name || '' };
 };
 
 async function computeUserPerformance(req: AuthRequest, userName: string, from: string, to: string) {
@@ -71,11 +71,15 @@ async function computeUserPerformance(req: AuthRequest, userName: string, from: 
   const taskIds = inRangeTasks.map((t: any) => t._id);
 
   // time logs in range by loggedAt date (more correct than per-task calls)
-  const logs = await TaskTimeLog.find({
+  const logFilter: any = {
     taskId: { $in: taskIds.map((id) => new mongoose.Types.ObjectId(String(id))) },
     loggedAt: { $gte: new Date(from + 'T00:00:00.000Z'), $lte: new Date(to + 'T23:59:59.999Z') },
-    ...(req.user?.role === 'managing_director' ? {} : { userName: req.user?.name }),
-  }).lean();
+  };
+  if (req.user?.role !== 'managing_director') {
+    logFilter.userName = req.user?.name || '';
+  }
+
+  const logs = await TaskTimeLog.find(logFilter).lean();
 
   const hoursByTask = new Map<string, number>();
   for (const l of logs as any[]) {

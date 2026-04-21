@@ -14,9 +14,15 @@ const isoDate = (d) => d.toISOString().slice(0, 10);
 const parseEventDateTime = (dateStr, timeStr) => {
     // date: YYYY-MM-DD, time: HH:mm
     // Treat as local time.
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const [hh, mm] = timeStr.split(':').map(Number);
-    return new Date(y, (m || 1) - 1, d || 1, hh || 0, mm || 0, 0, 0);
+    const [rawY, rawM, rawD] = dateStr.split('-').map(Number);
+    const [rawH, rawMin] = timeStr.split(':').map(Number);
+    const toSafeNumber = (value, fallback) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+    const y = toSafeNumber(rawY, 1970);
+    const m = toSafeNumber(rawM, 1);
+    const d = toSafeNumber(rawD, 1);
+    const hh = toSafeNumber(rawH, 0);
+    const mm = toSafeNumber(rawMin, 0);
+    return new Date(y, m - 1, d, hh, mm, 0, 0);
 };
 const hoursBetween = (a, b) => (b.getTime() - a.getTime()) / (1000 * 60 * 60);
 const uniq = (arr) => Array.from(new Set(arr));

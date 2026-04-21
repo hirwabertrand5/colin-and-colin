@@ -30,22 +30,30 @@ const createNotification = async (payload) => {
         if (exists)
             return null;
     }
-    const doc = await notificationModel_1.default.create({
+    const notificationPayload = {
         type: payload.type,
         title: payload.title,
         message: payload.message,
         severity: payload.severity || 'info',
         audienceUserIds: (payload.audienceUserIds || []).map((id) => new mongoose_1.default.Types.ObjectId(id)),
         audienceRoles: payload.audienceRoles || [],
-        link: payload.link,
-        dedupeKey: payload.dedupeKey,
-        caseId: payload.caseId ? new mongoose_1.default.Types.ObjectId(payload.caseId) : undefined,
-        taskId: payload.taskId ? new mongoose_1.default.Types.ObjectId(payload.taskId) : undefined,
-        eventId: payload.eventId ? new mongoose_1.default.Types.ObjectId(payload.eventId) : undefined,
-        fundId: payload.fundId ? new mongoose_1.default.Types.ObjectId(payload.fundId) : undefined,
-        expenseId: payload.expenseId ? new mongoose_1.default.Types.ObjectId(payload.expenseId) : undefined,
-    });
-    return doc.toObject();
+    };
+    if (payload.link)
+        notificationPayload.link = payload.link;
+    if (payload.dedupeKey)
+        notificationPayload.dedupeKey = payload.dedupeKey;
+    if (payload.caseId)
+        notificationPayload.caseId = new mongoose_1.default.Types.ObjectId(payload.caseId);
+    if (payload.taskId)
+        notificationPayload.taskId = new mongoose_1.default.Types.ObjectId(payload.taskId);
+    if (payload.eventId)
+        notificationPayload.eventId = new mongoose_1.default.Types.ObjectId(payload.eventId);
+    if (payload.fundId)
+        notificationPayload.fundId = new mongoose_1.default.Types.ObjectId(payload.fundId);
+    if (payload.expenseId)
+        notificationPayload.expenseId = new mongoose_1.default.Types.ObjectId(payload.expenseId);
+    const doc = await notificationModel_1.default.create(notificationPayload);
+    return typeof doc?.toObject === 'function' ? doc.toObject() : doc;
 };
 exports.createNotification = createNotification;
 const ensurePrefsExist = async (userIds) => {

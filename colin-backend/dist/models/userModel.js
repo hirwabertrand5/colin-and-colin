@@ -47,6 +47,7 @@ const UserSchema = new mongoose_1.Schema({
             'managing_director',
             'lawyer',
             'associate',
+            'junior_associate',
             'assistant',
             'executive_assistant',
             'intern'

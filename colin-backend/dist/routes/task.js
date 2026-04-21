@@ -7,7 +7,7 @@ const express_1 = __importDefault(require("express"));
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const taskController_1 = require("../controllers/taskController");
 const router = express_1.default.Router();
-const TASK_ASSIGN_ROLES = ['managing_director', 'executive_assistant'];
+const TASK_ASSIGN_ROLES = ['managing_director', 'executive_assistant', 'associate'];
 router.get('/cases/:caseId/tasks', authMiddleware_1.authenticate, taskController_1.getTasksForCase);
 router.post('/cases/:caseId/tasks', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(TASK_ASSIGN_ROLES), taskController_1.addTaskToCase);
 router.get('/tasks', authMiddleware_1.authenticate, taskController_1.getAllTasks);

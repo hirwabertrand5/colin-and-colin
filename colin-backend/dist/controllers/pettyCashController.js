@@ -54,7 +54,7 @@ const createFund = async (req, res) => {
             });
         }
         const actor = actorFromReq(req);
-        const fund = await pettyCashFundModel_1.default.create({
+        const fundPayload = {
             name: String(name).trim(),
             description: description ? String(description).trim() : '',
             initialAmount: num,
@@ -63,9 +63,12 @@ const createFund = async (req, res) => {
             status: 'active',
             lowBalancePercent: 20,
             lowBalanceNotifiedAt: null,
-            createdByUserId: actor.actorUserId ? new mongoose_1.default.Types.ObjectId(actor.actorUserId) : undefined,
             createdByName: actor.actorName,
-        });
+        };
+        if (actor.actorUserId) {
+            fundPayload.createdByUserId = new mongoose_1.default.Types.ObjectId(actor.actorUserId);
+        }
+        const fund = await pettyCashFundModel_1.default.create(fundPayload);
         // in-app notification (no email for created)
         await (0, notifyService_1.notifyRoles)({
             roles: ALLOWED_ROLES,
@@ -105,7 +108,9 @@ exports.closeActiveFund = closeActiveFund;
 // --------------------
 const listExpensesForFund = async (req, res) => {
     try {
-        const { fundId } = req.params;
+        const fundId = Array.isArray(req.params.fundId) ? req.params.fundId[0] : req.params.fundId;
+        if (!fundId)
+            return res.status(400).json({ message: 'Missing fundId.' });
         const expenses = await pettyCashExpenseModel_1.default.find({ fundId: new mongoose_1.default.Types.ObjectId(fundId) })
             .sort({ date: -1, createdAt: -1 })
             .limit(500);
@@ -119,8 +124,10 @@ exports.listExpensesForFund = listExpensesForFund;
 const createExpense = async (req, res) => {
     const session = await mongoose_1.default.startSession();
     try {
-        const { fundId } = req.params;
+        const fundId = Array.isArray(req.params.fundId) ? req.params.fundId[0] : req.params.fundId;
         const { date, title, amount, category, vendor, note } = req.body || {};
+        if (!fundId)
+            return res.status(400).json({ message: 'Missing fundId.' });
         const amt = Number(amount);
         if (!date || !title || !Number.isFinite(amt) || amt <= 0) {
             return res.status(400).json({ message: 'date, title, amount (>0) are required.' });
@@ -136,20 +143,28 @@ const createExpense = async (req, res) => {
                 throw new Error('INSUFFICIENT_FUNDS');
             const actor = actorFromReq(req);
             const receiptUrl = req.file?.filename ? `/uploads/${req.file.filename}` : undefined;
-            const expense = await pettyCashExpenseModel_1.default.create([
-                {
-                    fundId: fund._id,
-                    date: String(date),
-                    title: String(title).trim(),
-                    category: category ? String(category).trim() : undefined,
-                    vendor: vendor ? String(vendor).trim() : undefined,
-                    amount: amt,
-                    note: note ? String(note).trim() : undefined,
-                    receiptUrl,
-                    createdByUserId: actor.actorUserId ? new mongoose_1.default.Types.ObjectId(actor.actorUserId) : undefined,
-                    createdByName: actor.actorName,
-                },
-            ], { session });
+            const expensePayload = {
+                fundId: fund._id,
+                date: String(date),
+                title: String(title).trim(),
+                amount: amt,
+                createdByName: actor.actorName,
+            };
+            if (category)
+                expensePayload.category = String(category).trim();
+            if (vendor)
+                expensePayload.vendor = String(vendor).trim();
+            if (note)
+                expensePayload.note = String(note).trim();
+            if (receiptUrl)
+                expensePayload.receiptUrl = receiptUrl;
+            if (actor.actorUserId) {
+                expensePayload.createdByUserId = new mongoose_1.default.Types.ObjectId(actor.actorUserId);
+            }
+            const createdExpenses = await pettyCashExpenseModel_1.default.create([expensePayload], { session });
+            const expense = createdExpenses[0];
+            if (!expense)
+                throw new Error('EXPENSE_CREATE_FAILED');
             fund.spentAmount = Number(fund.spentAmount) + amt;
             fund.remainingAmount = Number(fund.remainingAmount) - amt;
             await fund.save({ session });
@@ -162,7 +177,7 @@ const createExpense = async (req, res) => {
                     title: 'Petty Cash Expense Recorded',
                     message: `${actor.actorName} recorded an expense of RWF ${amt.toLocaleString()} (${String(title).trim()}).`,
                     fundId: String(fund._id),
-                    expenseId: String(expense[0]._id),
+                    expenseId: String(expense._id),
                     severity: 'info',
                     link: '/petty-cash',
                 },
@@ -217,6 +232,8 @@ const createExpense = async (req, res) => {
             return res.status(400).json({ message: 'Fund is not active.' });
         if (msg === 'INSUFFICIENT_FUNDS')
             return res.status(400).json({ message: 'Insufficient petty cash balance for this expense.' });
+        if (msg === 'EXPENSE_CREATE_FAILED')
+            return res.status(500).json({ message: 'Failed to create expense.' });
         res.status(500).json({ message: 'Failed to create expense.' });
     }
     finally {

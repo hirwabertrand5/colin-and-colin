@@ -49,13 +49,18 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
       name: 'Cases',
       href: '/cases',
       icon: Briefcase,
-      roles: ['managing_director', 'executive_assistant', 'associate', 'lawyer', 'intern'],
+      roles: ['managing_director', 'executive_assistant', 'associate', 'junior_associate', 'lawyer', 'intern'],
     },
     { name: 'Tasks', href: '/tasks', icon: CheckSquare },
     { name: 'Calendar', href: '/calendar', icon: CalendarIcon },
     { name: 'Billing', href: '/billing', icon: DollarSign, roles: ['managing_director', 'executive_assistant'] },
     { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['managing_director'] },
-    { name: 'Performance', href: '/performance', icon: BarChart3, roles: ['associate', 'lawyer', 'intern'] },
+    {
+      name: 'Performance',
+      href: '/performance',
+      icon: BarChart3,
+      roles: ['associate', 'junior_associate', 'lawyer', 'intern'],
+    },
   ];
 
   const adminNavigation: NavItem[] = [

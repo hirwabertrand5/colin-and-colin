@@ -29,6 +29,7 @@ type StatCard = {
 
 const canAccess = (role: UserRole) =>
   role === 'associate' ||
+  role === 'junior_associate' ||
   role === 'lawyer' ||
   role === 'intern' ||
   role === 'managing_director' ||

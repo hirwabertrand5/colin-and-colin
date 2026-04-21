@@ -16,6 +16,7 @@ const ROLE_OPTIONS = [
   { value: 'managing_director', label: 'Managing Director' },
   { value: 'lawyer', label: 'Lawyer' },
   { value: 'associate', label: 'Associate' },
+  { value: 'junior_associate', label: 'Junior Associate' },
   { value: 'assistant', label: 'Assistant' },
   { value: 'executive_assistant', label: 'Executive Assistant' },
   { value: 'intern', label: 'Intern' },
@@ -25,6 +26,7 @@ const ROLE_DISPLAY_MAP: Record<string, string> = {
   managing_director: 'Managing Director',
   lawyer: 'Lawyer',
   associate: 'Associate',
+  junior_associate: 'Junior Associate',
   assistant: 'Assistant',
   executive_assistant: 'Executive Assistant',
   intern: 'Intern',
@@ -198,6 +200,7 @@ export default function UserManagement() {
       case 'managing_director': return 'bg-purple-100 text-purple-700';
       case 'lawyer': return 'bg-blue-100 text-blue-700';
       case 'associate': return 'bg-cyan-100 text-cyan-700';
+      case 'junior_associate': return 'bg-sky-100 text-sky-700';
       case 'assistant': return 'bg-yellow-100 text-yellow-700';
       case 'executive_assistant': return 'bg-green-100 text-green-700';
       case 'intern': return 'bg-gray-100 text-gray-700';

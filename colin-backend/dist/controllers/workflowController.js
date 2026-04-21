@@ -12,7 +12,7 @@ const documentModel_1 = __importDefault(require("../models/documentModel"));
 const taskModel_1 = __importDefault(require("../models/taskModel"));
 const auditService_1 = require("../services/auditService");
 const isAdmin = (role) => role === 'managing_director' || role === 'executive_assistant';
-const isAssociateLike = (role) => role === 'associate' || role === 'lawyer' || role === 'intern';
+const isAssociateLike = (role) => role === 'associate' || role === 'junior_associate' || role === 'lawyer' || role === 'intern';
 const actorFromReq = (req) => ({
     actorName: req.user?.name || 'System',
     actorUserId: req.user?.id,

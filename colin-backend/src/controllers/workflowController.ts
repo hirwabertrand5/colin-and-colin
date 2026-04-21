@@ -9,7 +9,8 @@ import Task from '../models/taskModel';
 import { writeAudit } from '../services/auditService';
 
 const isAdmin = (role?: string) => role === 'managing_director' || role === 'executive_assistant';
-const isAssociateLike = (role?: string) => role === 'associate' || role === 'lawyer' || role === 'intern';
+const isAssociateLike = (role?: string) =>
+  role === 'associate' || role === 'junior_associate' || role === 'lawyer' || role === 'intern';
 
 const actorFromReq = (req: AuthRequest) => ({
   actorName: req.user?.name || 'System',

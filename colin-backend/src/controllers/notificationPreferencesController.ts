@@ -4,7 +4,12 @@ import { AuthRequest } from '../middleware/authMiddleware';
 import NotificationPreferences from '../models/notificationPreferencesModel';
 
 const isAllowed = (role?: string) =>
-  role === 'managing_director' || role === 'executive_assistant' || role === 'associate' || role === 'lawyer';
+  role === 'managing_director' ||
+  role === 'executive_assistant' ||
+  role === 'associate' ||
+  role === 'junior_associate' ||
+  role === 'lawyer' ||
+  role === 'intern';
 
 export const getMyNotificationPreferences = async (req: AuthRequest, res: Response) => {
   try {

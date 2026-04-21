@@ -481,7 +481,7 @@ export default function CreateCase() {
                 <option value="">{templatesLoading ? 'Loading templates...' : 'Select workflow template'}</option>
                 {templates.map((t) => (
                   <option key={t._id} value={t._id}>
-                    {t.matterType} (v{t.version})
+                    {t.matterType}
                   </option>
                 ))}
               </select>
@@ -606,6 +606,7 @@ const ROLE_DISPLAY_MAP: Record<string, string> = {
   managing_director: 'Managing Director',
   lawyer: 'Lawyer',
   associate: 'Associate',
+  junior_associate: 'Junior Associate',
   assistant: 'Assistant',
   executive_assistant: 'Executive Assistant',
   intern: 'Intern',

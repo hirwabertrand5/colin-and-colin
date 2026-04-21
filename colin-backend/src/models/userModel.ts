@@ -1,7 +1,14 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs'; // Using bcryptjs for better compatibility
 
-export type UserRole = 'managing_director' | 'associate' | 'executive_assistant';
+export type UserRole =
+  | 'managing_director'
+  | 'lawyer'
+  | 'associate'
+  | 'junior_associate'
+  | 'assistant'
+  | 'executive_assistant'
+  | 'intern';
 
 export interface IUser extends Document {
   email: string;
@@ -26,6 +33,7 @@ const UserSchema = new Schema<IUser>(
     'managing_director',
     'lawyer',
     'associate',
+    'junior_associate',
     'assistant',
     'executive_assistant',
     'intern'

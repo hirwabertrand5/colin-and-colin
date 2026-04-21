@@ -30,6 +30,9 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
   }
 
   const token = authHeader.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ message: 'No token provided.' });
+  }
   const secret = process.env.JWT_SECRET;
 if (!secret) throw new Error('JWT_SECRET is not set in environment variables');
 

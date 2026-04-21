@@ -64,6 +64,7 @@ type NewDocForm = {
 };
 
 const eventTypes = ['Deadline', 'Court', 'Meeting', 'Other'];
+const ASSOCIATE_ASSIGNABLE_ROLES = ['junior_associate', 'intern'];
 
 const STAGE_ORDER = [
   'On Boarding',
@@ -106,10 +107,11 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const isAssociate = ['associate', 'lawyer', 'intern'].includes(userRole);
+  const isRestrictedAssigneeRole = ['junior_associate', 'intern'].includes(userRole);
   const canManageCase = userRole === 'managing_director' || userRole === 'executive_assistant';
   const canDeleteCase = userRole === 'managing_director';
-  const canAssignTasks = userRole === 'managing_director' || userRole === 'executive_assistant';
+  const canAssignTasks =
+    userRole === 'managing_director' || userRole === 'executive_assistant' || userRole === 'associate';
   const canManageBilling = userRole === 'managing_director' || userRole === 'executive_assistant';
   const canManageCalendar = userRole === 'managing_director' || userRole === 'executive_assistant';
   const canManageDocuments = userRole === 'managing_director' || userRole === 'executive_assistant';
@@ -129,6 +131,10 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffError, setStaffError] = useState('');
+  const assignableStaffUsers =
+    canAssignTasks && userRole === 'associate'
+      ? staffUsers.filter((u) => ASSOCIATE_ASSIGNABLE_ROLES.includes(u.role))
+      : staffUsers;
 
   // Tasks
   const [tasks, setTasks] = useState<TaskData[]>([]);
@@ -381,7 +387,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   };
 
   const handleStatusChange = async (task: TaskData, newStatus: string) => {
-    if (isAssociate) return; // ✅ read-only in case workspace for associates
+    if (isRestrictedAssigneeRole) return;
     try {
       await updateTask(task._id!, { status: newStatus });
       reloadTasks();
@@ -962,7 +968,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
 
                       {/* ✅ Associates read-only status */}
                       <td className="px-4 py-3">
-                        {isAssociate ? (
+                        {isRestrictedAssigneeRole ? (
                           <span className="text-sm text-gray-700">{task.status}</span>
                         ) : (
                           <select
@@ -1031,7 +1037,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                 </tbody>
               </table>
 
-              {isAssociate && (
+              {isRestrictedAssigneeRole && (
                 <div className="px-5 py-4 text-xs text-gray-500 border-t">
                   Note: Task progress updates should be done from the Task page.
                 </div>
@@ -1100,9 +1106,9 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                   required
                 >
                   <option value="">{staffLoading ? 'Loading...' : 'Select assignee'}</option>
-                  {staffUsers.map((u) => (
+                  {assignableStaffUsers.map((u) => (
                     <option key={u._id} value={u.name}>
-                      {u.name}
+                      {u.name} ({u.role.replace(/_/g, ' ')})
                     </option>
                   ))}
                 </select>
@@ -1215,9 +1221,9 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                   required
                 >
                   <option value="">{staffLoading ? 'Loading...' : 'Select assignee'}</option>
-                  {staffUsers.map((u) => (
+                  {assignableStaffUsers.map((u) => (
                     <option key={u._id} value={u.name}>
-                      {u.name}
+                      {u.name} ({u.role.replace(/_/g, ' ')})
                     </option>
                   ))}
                 </select>

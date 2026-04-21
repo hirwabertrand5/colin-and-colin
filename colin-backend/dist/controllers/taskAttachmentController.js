@@ -51,7 +51,7 @@ const uploadAttachmentToTask = async (req, res) => {
         const displayName = String(name || req.file.originalname).trim();
         const url = `/uploads/${req.file.filename}`;
         // 1) Save TaskAttachment
-        const attachment = await taskAttachmentModel_1.default.create({
+        const attachmentPayload = {
             taskId: new mongoose_1.default.Types.ObjectId(taskId),
             caseId: task.caseId,
             name: displayName,
@@ -60,8 +60,10 @@ const uploadAttachmentToTask = async (req, res) => {
             uploadedDate: new Date().toISOString().slice(0, 10),
             size: (req.file.size / 1024 / 1024).toFixed(2) + ' MB',
             url,
-            note: note ? String(note).trim() : undefined,
-        });
+        };
+        if (note)
+            attachmentPayload.note = String(note).trim();
+        const attachment = await taskAttachmentModel_1.default.create(attachmentPayload);
         // 2) Also create Case Document (so visible in Case Documents tab)
         const caseDocName = `Task: ${task.title} — ${displayName}`;
         await documentModel_1.default.create({

@@ -6,7 +6,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateMyNotificationPreferences = exports.getMyNotificationPreferences = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const notificationPreferencesModel_1 = __importDefault(require("../models/notificationPreferencesModel"));
-const isAllowed = (role) => role === 'managing_director' || role === 'executive_assistant' || role === 'associate' || role === 'lawyer';
+const isAllowed = (role) => role === 'managing_director' ||
+    role === 'executive_assistant' ||
+    role === 'associate' ||
+    role === 'junior_associate' ||
+    role === 'lawyer' ||
+    role === 'intern';
 const getMyNotificationPreferences = async (req, res) => {
     try {
         if (!req.user?.id || !isAllowed(req.user.role)) {

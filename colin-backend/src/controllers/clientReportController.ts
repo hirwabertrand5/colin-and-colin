@@ -247,34 +247,34 @@ export const generateReportForCase = async (req: AuthRequest, res: Response) => 
 
       updates: (audit || []).map((a: any) => ({
         createdAt: new Date(a.createdAt).toLocaleString(),
-        action: a.action ? safe(a.action) : undefined,
         message: safe(a.message),
-        detail: a.detail ? safe(a.detail) : undefined,
-        actorName: a.actorName ? safe(a.actorName) : undefined,
+        ...(a.action ? { action: safe(a.action) } : {}),
+        ...(a.detail ? { detail: safe(a.detail) } : {}),
+        ...(a.actorName ? { actorName: safe(a.actorName) } : {}),
       })),
 
       tasks: (tasks || []).map((t: any) => ({
         title: safe(t.title),
         status: safe(t.status),
-        priority: t.priority ? safe(t.priority) : '',
         assignee: safe(t.assignee),
-        dueDate: t.dueDate ? safe(t.dueDate) : undefined,
+        ...(t.priority ? { priority: safe(t.priority) } : {}),
+        ...(t.dueDate ? { dueDate: safe(t.dueDate) } : {}),
       })),
 
       events: (events || []).map((e: any) => ({
         title: safe(e.title),
         type: safe(e.type),
         date: safe(e.date),
-        time: e.time ? safe(e.time) : undefined,
-        description: e.description ? safe(e.description) : undefined,
+        ...(e.time ? { time: safe(e.time) } : {}),
+        ...(e.description ? { description: safe(e.description) } : {}),
       })),
 
       documents: (docs || []).map((d: any) => ({
         name: safe(d.name),
         uploadedDate: d.uploadedDate ? safe(d.uploadedDate) : new Date(d.createdAt).toLocaleDateString(),
         uploadedBy: safe(d.uploadedBy),
-        category: d.category ? safe(d.category) : undefined,
-        size: d.size ? safe(d.size) : undefined,
+        ...(d.category ? { category: safe(d.category) } : {}),
+        ...(d.size ? { size: safe(d.size) } : {}),
       })),
     });
 

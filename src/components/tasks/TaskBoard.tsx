@@ -12,7 +12,8 @@ interface TaskBoardProps {
 
 type BoardColumnId = 'Not Started' | 'In Progress' | 'Pending Approval' | 'Completed';
 
-const isAssociateLike = (role: UserRole) => role === 'associate' || role === 'lawyer' || role === 'intern';
+const isAssociateLike = (role: UserRole) =>
+  role === 'associate' || role === 'junior_associate' || role === 'lawyer' || role === 'intern';
 
 export default function TaskBoard({ userRole }: TaskBoardProps) {
   usePageTitle('Tasks');

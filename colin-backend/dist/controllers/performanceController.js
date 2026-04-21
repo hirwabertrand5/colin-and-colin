@@ -53,7 +53,7 @@ const getUserScopeFilter = (req, userName) => {
     // MD can query anyone; others can query only self.
     if (req.user?.role === 'managing_director')
         return { assignee: userName };
-    return { assignee: req.user?.name };
+    return { assignee: req.user?.name || '' };
 };
 async function computeUserPerformance(req, userName, from, to) {
     const scope = getUserScopeFilter(req, userName);
@@ -63,11 +63,14 @@ async function computeUserPerformance(req, userName, from, to) {
     const inRangeTasks = tasks.filter((t) => String(t.dueDate) >= from && String(t.dueDate) <= to);
     const taskIds = inRangeTasks.map((t) => t._id);
     // time logs in range by loggedAt date (more correct than per-task calls)
-    const logs = await taskTimeLogModel_1.default.find({
+    const logFilter = {
         taskId: { $in: taskIds.map((id) => new mongoose_1.default.Types.ObjectId(String(id))) },
         loggedAt: { $gte: new Date(from + 'T00:00:00.000Z'), $lte: new Date(to + 'T23:59:59.999Z') },
-        ...(req.user?.role === 'managing_director' ? {} : { userName: req.user?.name }),
-    }).lean();
+    };
+    if (req.user?.role !== 'managing_director') {
+        logFilter.userName = req.user?.name || '';
+    }
+    const logs = await taskTimeLogModel_1.default.find(logFilter).lean();
     const hoursByTask = new Map();
     for (const l of logs) {
         const key = String(l.taskId);

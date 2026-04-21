@@ -24,7 +24,9 @@ import { useAutoLogout } from './hooks/useAutoLogout';
 export type UserRole =
   | 'managing_director'
   | 'executive_assistant'
+  | 'assistant'
   | 'associate'
+  | 'junior_associate'
   | 'lawyer'
   | 'intern';
 
@@ -35,7 +37,8 @@ export interface User {
   role: UserRole;
 }
 
-const isAssociateLike = (role?: string) => role === 'associate' || role === 'lawyer' || role === 'intern';
+const isAssociateLike = (role?: string) =>
+  role === 'associate' || role === 'junior_associate' || role === 'lawyer' || role === 'intern';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);

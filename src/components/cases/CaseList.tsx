@@ -9,7 +9,8 @@ interface CaseListProps {
   userRole: UserRole;
 }
 
-const isAssociateLike = (role: UserRole) => role === 'associate' || role === 'lawyer' || role === 'intern';
+const isAssociateLike = (role: UserRole) =>
+  role === 'associate' || role === 'junior_associate' || role === 'lawyer' || role === 'intern';
 
 export default function CaseList({ userRole }: CaseListProps) {
   const CASES_PER_PAGE = 10;

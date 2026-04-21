@@ -14,7 +14,7 @@ const actorFromReq = (req) => ({
     actorUserId: req.user?.id,
 });
 const isAdminCaseRole = (role) => role === 'managing_director' || role === 'executive_assistant';
-const isAssociateLikeRole = (role) => role === 'associate' || role === 'lawyer' || role === 'intern';
+const isAssociateLikeRole = (role) => role === 'associate' || role === 'junior_associate' || role === 'lawyer' || role === 'intern';
 const canAssociateLikeAccessCase = async (req, foundCase) => {
     if (!isAssociateLikeRole(req.user?.role))
         return false;
@@ -95,8 +95,8 @@ const createCase = async (req, res) => {
                 newCase.matterType = template.matterType;
                 newCase.workflowProgress = {
                     status: 'In Progress',
-                    currentStepKey: inst.currentStepKey,
                     percent: 0,
+                    ...(inst.currentStepKey ? { currentStepKey: inst.currentStepKey } : {}),
                 };
                 await newCase.save();
                 const actor = actorFromReq(req);

@@ -19,7 +19,7 @@ import {
 
 const router = express.Router();
 
-const TASK_ASSIGN_ROLES = ['managing_director', 'executive_assistant'];
+const TASK_ASSIGN_ROLES = ['managing_director', 'executive_assistant', 'associate'];
 
 router.get('/cases/:caseId/tasks', authenticate, getTasksForCase);
 

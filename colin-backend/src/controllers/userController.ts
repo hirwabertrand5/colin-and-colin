@@ -1,8 +1,11 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import User from '../models/userModel.js';
+import { AuthRequest } from '../middleware/authMiddleware.js';
+
+const ASSOCIATE_ASSIGNABLE_ROLES = ['junior_associate', 'intern'];
 
 // Get all users (excluding passwordHash)
-export const getAllUsers = async (req: Request, res: Response) => {
+export const getAllUsers = async (req: AuthRequest, res: Response) => {
   try {
     const users = await User.find({}, '-passwordHash -__v');
     res.json(users);
@@ -12,20 +15,26 @@ export const getAllUsers = async (req: Request, res: Response) => {
 };
 
 // ✅ NEW: Get active staff users for assignment dropdown
-export const getStaffUsers = async (req: Request, res: Response) => {
+export const getStaffUsers = async (req: AuthRequest, res: Response) => {
   try {
+    const allowedRoles =
+      req.user?.role === 'associate'
+        ? ASSOCIATE_ASSIGNABLE_ROLES
+        : [
+            'managing_director',
+            'lawyer',
+            'associate',
+            'junior_associate',
+            'assistant',
+            'executive_assistant',
+            'intern',
+          ];
+
     const staff = await User.find(
       {
         isActive: true,
         role: {
-          $in: [
-            'managing_director',
-            'lawyer',
-            'associate',
-            'assistant',
-            'executive_assistant',
-            'intern',
-          ],
+          $in: allowedRoles,
         },
       },
       'name email role isActive'
@@ -38,7 +47,7 @@ export const getStaffUsers = async (req: Request, res: Response) => {
 };
 
 // Add new user
-export const addUser = async (req: Request, res: Response) => {
+export const addUser = async (req: AuthRequest, res: Response) => {
   try {
     const { name, email, role, password } = req.body;
 
@@ -72,7 +81,7 @@ export const addUser = async (req: Request, res: Response) => {
 };
 
 // Reset user password
-export const resetUserPassword = async (req: Request, res: Response) => {
+export const resetUserPassword = async (req: AuthRequest, res: Response) => {
   try {
     const { userId, newPassword } = req.body;
     const user = await User.findById(userId);
@@ -91,7 +100,7 @@ export const resetUserPassword = async (req: Request, res: Response) => {
 };
 
 // Toggle user active status
-export const setUserActiveStatus = async (req: Request, res: Response) => {
+export const setUserActiveStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { userId, isActive } = req.body;
     const user = await User.findByIdAndUpdate(userId, { isActive }, { new: true });
@@ -110,7 +119,7 @@ export const setUserActiveStatus = async (req: Request, res: Response) => {
 };
 
 // Update user
-export const updateUser = async (req: Request, res: Response) => {
+export const updateUser = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { name, email, role } = req.body;
@@ -123,7 +132,7 @@ export const updateUser = async (req: Request, res: Response) => {
 };
 
 // Delete user
-export const deleteUser = async (req: Request, res: Response) => {
+export const deleteUser = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const user = await User.findByIdAndDelete(id);

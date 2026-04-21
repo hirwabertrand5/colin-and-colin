@@ -3,12 +3,15 @@ import { Response } from 'express';
 import mongoose from 'mongoose';
 import Task from '../models/taskModel';
 import Case from '../models/caseModel';
+import User from '../models/userModel';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { writeAudit } from '../services/auditService';
 import TaskTimeLog from '../models/taskTimeLogModel';
 import { notifyRoles, notifyUsersById, findUserByAssigneeString } from '../services/notifyService';
 
-const isAssociateLikeRole = (role?: string) => role === 'associate' || role === 'lawyer' || role === 'intern';
+const isAssociateLikeRole = (role?: string) =>
+  role === 'associate' || role === 'junior_associate' || role === 'lawyer' || role === 'intern';
+const isAssociateAssignableRole = (role?: string) => role === 'junior_associate' || role === 'intern';
 const actorFromReq = (req: AuthRequest) => ({
   actorName: req.user?.name || 'System',
   actorUserId: req.user?.id as string | undefined,
@@ -24,6 +27,45 @@ const withActor = (req: AuthRequest) => {
 
 const isAdminCaseRole = (role?: string) =>
   role === 'managing_director' || role === 'executive_assistant';
+
+const canCoordinateTasksForCase = async (req: AuthRequest, caseId: string) => {
+  if (isAdminCaseRole(req.user?.role)) return true;
+  if (req.user?.role === 'associate') return canAccessCaseId(req, caseId);
+  return false;
+};
+
+const canManageTask = async (req: AuthRequest, task: any) => {
+  if (isAdminCaseRole(req.user?.role)) return true;
+  if (req.user?.role === 'associate') return canAccessCaseId(req, String(task.caseId));
+  return false;
+};
+
+const canAccessTask = async (req: AuthRequest, task: any) => {
+  if (await canManageTask(req, task)) return true;
+  return task.assignee === req.user?.name;
+};
+
+const assertAssigneeAllowed = async (req: AuthRequest, assigneeValue: unknown) => {
+  const assignee = String(assigneeValue || '').trim();
+  if (!assignee) throw new Error('Assignee is required.');
+
+  if (req.user?.role !== 'associate') return;
+
+  const assigneeUser: any = await User.findOne({
+    isActive: true,
+    $or: [{ name: assignee }, { email: assignee.toLowerCase() }],
+  })
+    .select('role isActive')
+    .lean();
+
+  if (!assigneeUser) {
+    throw new Error('Selected assignee was not found.');
+  }
+
+  if (!isAssociateAssignableRole(assigneeUser.role)) {
+    throw new Error('Associates can assign tasks only to junior associates and interns.');
+  }
+};
 
 // Approved tasks become read-only for everyone
 const isApprovedLocked = (task: any) =>
@@ -93,10 +135,11 @@ export const addTaskToCase = async (req: AuthRequest, res: Response) => {
     if (Array.isArray(caseId)) caseId = caseId[0];
     if (!caseId) return res.status(400).json({ message: 'Missing caseId' });
 
-    // ✅ Guard (even though associates are blocked by route)
-    if (!(await canAccessCaseId(req, String(caseId)))) {
+    if (!(await canCoordinateTasksForCase(req, String(caseId)))) {
       return res.status(403).json({ message: 'Forbidden.' });
     }
+
+    await assertAssigneeAllowed(req, req.body?.assignee);
 
     const requiresApproval = Boolean(req.body.requiresApproval);
     const approvalStatus = requiresApproval ? 'Draft' : 'Not Required';
@@ -175,7 +218,13 @@ export const getAllTasks = async (req: AuthRequest, res: Response) => {
     const filter: any = {};
 
     // Visibility: non-MD sees only own tasks (MVP using name)
-    if (req.user?.role !== 'managing_director') {
+    if (req.user?.role === 'associate') {
+      const me = (req.user?.name || '').trim();
+      const ownedCaseIds = await Case.find({ assignedTo: me }).distinct('_id');
+      const caseIdsFromAssignedTasks = await Task.distinct('caseId', { assignee: me });
+      const visibleCaseIds = [...new Set([...ownedCaseIds, ...caseIdsFromAssignedTasks].map(String))];
+      filter.caseId = { $in: visibleCaseIds.map((value) => new mongoose.Types.ObjectId(value)) };
+    } else if (req.user?.role !== 'managing_director') {
       filter.assignee = req.user?.name;
     }
 
@@ -204,8 +253,7 @@ export const getTaskById = async (req: AuthRequest, res: Response) => {
     const task: any = await Task.findById(taskId);
     if (!task) return res.status(404).json({ message: 'Task not found.' });
 
-    // Visibility rule:
-    if (req.user?.role !== 'managing_director' && task.assignee !== req.user?.name) {
+    if (!(await canAccessTask(req, task))) {
       return res.status(403).json({ message: 'Forbidden.' });
     }
 
@@ -225,8 +273,27 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
     const before: any = await Task.findById(taskId);
     if (!before) return res.status(404).json({ message: 'Task not found.' });
 
+    const canManage = await canManageTask(req, before);
+    const isAssignee = before.assignee === req.user?.name;
+
+    if (!canManage && !isAssignee) {
+      return res.status(403).json({ message: 'Forbidden.' });
+    }
+
+    if (!canManage) {
+      const attemptedKeys = Object.keys(req.body || {}).filter((key) => req.body?.[key] !== undefined);
+      const allowedSelfServiceKeys = ['status'];
+      if (attemptedKeys.some((key) => !allowedSelfServiceKeys.includes(key))) {
+        return res.status(403).json({ message: 'You can only update task status.' });
+      }
+    }
+
     if (isApprovedLocked(before)) {
       return res.status(403).json({ message: 'This task is approved and locked (read-only).' });
+    }
+
+    if (canManage && Object.prototype.hasOwnProperty.call(req.body || {}, 'assignee')) {
+      await assertAssigneeAllowed(req, req.body?.assignee);
     }
 
     // ✅ Maintain completedAt properly when status changes
@@ -292,6 +359,13 @@ export const deleteTask = async (req: AuthRequest, res: Response) => {
     let taskId: any = req.params.taskId;
     if (Array.isArray(taskId)) taskId = taskId[0];
     if (!taskId) return res.status(400).json({ message: 'Missing taskId' });
+
+    const existing: any = await Task.findById(taskId);
+    if (!existing) return res.status(404).json({ message: 'Task not found.' });
+
+    if (!(await canManageTask(req, existing))) {
+      return res.status(403).json({ message: 'Forbidden.' });
+    }
 
     const deleted = await Task.findByIdAndDelete(taskId);
     if (!deleted) return res.status(404).json({ message: 'Task not found.' });
