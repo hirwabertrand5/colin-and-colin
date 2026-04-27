@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Filter, Briefcase } from 'lucide-react';
+import { Plus, Search, Briefcase, ArrowUpDown } from 'lucide-react';
 import { UserRole } from '../../App';
 import { getAllCases, CaseData } from '../../services/caseService';
 import usePageTitle from '../../hooks/usePageTitle';
@@ -12,6 +12,9 @@ interface CaseListProps {
 const isAssociateLike = (role: UserRole) =>
   role === 'associate' || role === 'junior_associate' || role === 'lawyer' || role === 'intern';
 
+type SortKey = 'updatedAt' | 'createdAt' | 'priority' | 'status' | 'caseNo' | 'parties';
+type SortDir = 'asc' | 'desc';
+
 export default function CaseList({ userRole }: CaseListProps) {
   const CASES_PER_PAGE = 10;
 
@@ -19,6 +22,8 @@ export default function CaseList({ userRole }: CaseListProps) {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [sortKey, setSortKey] = useState<SortKey>('updatedAt');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [cases, setCases] = useState<CaseData[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -26,6 +31,8 @@ export default function CaseList({ userRole }: CaseListProps) {
 
   const assocLike = isAssociateLike(userRole);
   const canManageCases = userRole === 'managing_director' || userRole === 'executive_assistant';
+
+  const deferredSearchTerm = useDeferredValue(searchTerm);
 
   useEffect(() => {
     loadCases();
@@ -84,25 +91,100 @@ export default function CaseList({ userRole }: CaseListProps) {
     }
   };
 
-  const filteredCases = cases.filter((c) => {
-    const matchesSearch =
-      c.parties?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.caseNo?.toLowerCase().includes(searchTerm.toLowerCase());
+  const collator = useMemo(() => new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }), []);
 
-    const matchesFilter = filterStatus === 'all' || c.status === filterStatus;
+  const indexedCases = useMemo(() => {
+    const priorityRank = (priority: string | undefined) => {
+      if (priority === 'High') return 3;
+      if (priority === 'Medium') return 2;
+      if (priority === 'Low') return 1;
+      return 0;
+    };
 
-    return matchesSearch && matchesFilter;
-  });
+    const STATUS_ORDER: Record<string, number> = {
+      'On Boarding': 1,
+      Submission: 2,
+      'Under Submission': 3,
+      'Pre trial': 4,
+      Mediation: 5,
+      Hearing: 6,
+      Appeal: 7,
+      Pronouncement: 8,
+      'Cope of Judgement': 9,
+      Execution: 10,
+    };
 
-  const totalPages = Math.max(1, Math.ceil(filteredCases.length / CASES_PER_PAGE));
-  const paginatedCases = filteredCases.slice(
+    const toMs = (value: string | undefined) => {
+      if (!value) return 0;
+      const ms = Date.parse(value);
+      return Number.isFinite(ms) ? ms : 0;
+    };
+
+    return cases.map((c, originalIndex) => ({
+      c,
+      originalIndex,
+      searchable: `${c.caseNo ?? ''} ${c.parties ?? ''}`.toLowerCase(),
+      createdAtMs: toMs(c.createdAt),
+      updatedAtMs: toMs(c.updatedAt),
+      priorityRank: priorityRank(c.priority),
+      statusRank: STATUS_ORDER[c.status ?? ''] ?? 0,
+    }));
+  }, [cases]);
+
+  const filteredSortedCases = useMemo(() => {
+    const q = deferredSearchTerm.trim().toLowerCase();
+
+    let list = indexedCases;
+    if (q) {
+      list = list.filter((x) => x.searchable.includes(q));
+    }
+    if (filterStatus !== 'all') {
+      list = list.filter((x) => x.c.status === filterStatus);
+    }
+
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const sorted = list.slice().sort((a, b) => {
+      let cmp = 0;
+
+      switch (sortKey) {
+        case 'updatedAt':
+          cmp = a.updatedAtMs - b.updatedAtMs;
+          break;
+        case 'createdAt':
+          cmp = a.createdAtMs - b.createdAtMs;
+          break;
+        case 'priority':
+          cmp = a.priorityRank - b.priorityRank;
+          break;
+        case 'status':
+          cmp = a.statusRank - b.statusRank;
+          break;
+        case 'caseNo':
+          cmp = collator.compare(a.c.caseNo ?? '', b.c.caseNo ?? '');
+          break;
+        case 'parties':
+          cmp = collator.compare(a.c.parties ?? '', b.c.parties ?? '');
+          break;
+        default:
+          cmp = 0;
+      }
+
+      if (cmp !== 0) return cmp * dir;
+      return a.originalIndex - b.originalIndex;
+    });
+
+    return sorted.map((x) => x.c);
+  }, [collator, deferredSearchTerm, filterStatus, indexedCases, sortDir, sortKey]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSortedCases.length / CASES_PER_PAGE));
+  const paginatedCases = filteredSortedCases.slice(
     (currentPage - 1) * CASES_PER_PAGE,
     currentPage * CASES_PER_PAGE
   );
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterStatus]);
+  }, [searchTerm, filterStatus, sortKey, sortDir]);
 
   useEffect(() => {
     setCurrentPage((prev) => Math.min(prev, totalPages));
@@ -164,12 +246,35 @@ export default function CaseList({ userRole }: CaseListProps) {
             <option value="Execution">Execution</option>
           </select>
 
-          {!assocLike && (
-            <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition">
-              <Filter className="w-4 h-4 mr-2" />
-              More Filters
+          <div className="flex gap-2">
+            <select
+              value={sortKey}
+              onChange={(e) => {
+                const nextKey = e.target.value as SortKey;
+                setSortKey(nextKey);
+                setSortDir(nextKey === 'updatedAt' || nextKey === 'createdAt' || nextKey === 'priority' ? 'desc' : 'asc');
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-400 focus:outline-none"
+            >
+              <option value="updatedAt">Sort: Last Updated</option>
+              <option value="createdAt">Sort: Date Created</option>
+              <option value="priority">Sort: Priority</option>
+              <option value="status">Sort: Status</option>
+              <option value="caseNo">Sort: Case No.</option>
+              <option value="parties">Sort: Parties</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition"
+              title={`Sort ${sortDir === 'asc' ? 'descending' : 'ascending'}`}
+            >
+              <ArrowUpDown className="w-4 h-4 mr-2" />
+              {sortDir === 'asc' ? 'Asc' : 'Desc'}
             </button>
-          )}
+          </div>
+
         </div>
       </div>
 
@@ -253,18 +358,18 @@ export default function CaseList({ userRole }: CaseListProps) {
 
         {loading && <div className="text-center py-12 text-gray-500">Loading cases...</div>}
 
-        {!loading && filteredCases.length === 0 && (
+        {!loading && filteredSortedCases.length === 0 && (
           <div className="text-center py-12">
             <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500">No cases found</p>
           </div>
         )}
 
-        {!loading && filteredCases.length > 0 && (
+        {!loading && filteredSortedCases.length > 0 && (
           <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4">
             <p className="text-sm text-gray-600">
               Showing {(currentPage - 1) * CASES_PER_PAGE + 1}-
-              {Math.min(currentPage * CASES_PER_PAGE, filteredCases.length)} of {filteredCases.length} cases
+              {Math.min(currentPage * CASES_PER_PAGE, filteredSortedCases.length)} of {filteredSortedCases.length} cases
             </p>
 
             <div className="flex items-center gap-2">

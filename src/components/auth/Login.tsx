@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { User } from '../../App';
-import companyLogo from '../../assets/logo-colin.png';
+import companyLogoLight from '../../assets/logo-colin.png';
+import companyLogoDark from '../../assets/logo-colin-dark-mode.png';
 import { loginApi } from '../../services/authService';
+import { useTheme } from '../../hooks/useTheme';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -13,6 +15,8 @@ export default function Login({ onLogin }: LoginProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { isDark } = useTheme();
+  const companyLogo = isDark ? companyLogoDark : companyLogoLight;
 
   const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();

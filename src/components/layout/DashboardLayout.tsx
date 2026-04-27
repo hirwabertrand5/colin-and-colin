@@ -20,7 +20,8 @@ import {
 import { User } from '../../App';
 import { useTheme } from '../../hooks/useTheme';
 
-import companyLogo from '../../assets/logo-colin.png';
+import companyLogoLight from '../../assets/logo-colin.png';
+import companyLogoDark from '../../assets/logo-colin-dark-mode.png';
 import { getUnreadNotificationCount } from '../../services/notificationService';
 
 interface DashboardLayoutProps {
@@ -42,6 +43,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
   const topbarRef = useRef<HTMLElement | null>(null);
   const location = useLocation();
   const { isDark, toggleTheme } = useTheme();
+  const companyLogo = isDark ? companyLogoDark : companyLogoLight;
 
   const navigation: NavItem[] = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -238,7 +240,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
           <div className="flex items-center space-x-4">
             <button
               onClick={toggleTheme}
-              className="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+              className="relative z-10 p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {isDark ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}

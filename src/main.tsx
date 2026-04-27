@@ -1,7 +1,13 @@
 
-  import { createRoot } from "react-dom/client";
-  import App from "./App.tsx";
-  import "./index.css";
+import { createRoot } from 'react-dom/client';
+import { ThemeProvider } from 'next-themes';
+import App from './App.tsx';
+import './index.css';
+import './styles/dark-variants.css';
 
-  createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById('root')!).render(
+  <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="theme">
+    <App />
+  </ThemeProvider>
+);
   
