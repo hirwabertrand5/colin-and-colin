@@ -7,6 +7,7 @@ exports.deleteExpense = exports.createExpense = exports.listExpensesForFund = ex
 const mongoose_1 = __importDefault(require("mongoose"));
 const pettyCashFundModel_1 = __importDefault(require("../models/pettyCashFundModel"));
 const pettyCashExpenseModel_1 = __importDefault(require("../models/pettyCashExpenseModel"));
+const caseModel_1 = __importDefault(require("../models/caseModel"));
 const notifyService_1 = require("../services/notifyService");
 const ALLOWED_ROLES = ['managing_director', 'executive_assistant'];
 const actorFromReq = (req) => ({
@@ -125,7 +126,7 @@ const createExpense = async (req, res) => {
     const session = await mongoose_1.default.startSession();
     try {
         const fundId = Array.isArray(req.params.fundId) ? req.params.fundId[0] : req.params.fundId;
-        const { date, title, amount, category, vendor, note } = req.body || {};
+        const { date, title, amount, category, vendor, note, receiptRef, refundAmount, refundedBy, chargeType, caseId, } = req.body || {};
         if (!fundId)
             return res.status(400).json({ message: 'Missing fundId.' });
         const amt = Number(amount);
@@ -143,6 +144,23 @@ const createExpense = async (req, res) => {
                 throw new Error('INSUFFICIENT_FUNDS');
             const actor = actorFromReq(req);
             const receiptUrl = req.file?.filename ? `/uploads/${req.file.filename}` : undefined;
+            const normalizedChargeType = String(chargeType || 'internal') === 'client' ? 'client' : 'internal';
+            let caseNoSnapshot;
+            let partiesSnapshot;
+            let resolvedCaseObjectId;
+            if (normalizedChargeType === 'client' && !caseId) {
+                throw new Error('CASE_REQUIRED');
+            }
+            if (caseId) {
+                if (!mongoose_1.default.Types.ObjectId.isValid(String(caseId)))
+                    throw new Error('INVALID_CASE');
+                resolvedCaseObjectId = new mongoose_1.default.Types.ObjectId(String(caseId));
+                const c = await caseModel_1.default.findById(resolvedCaseObjectId).session(session).lean();
+                if (!c)
+                    throw new Error('CASE_NOT_FOUND');
+                caseNoSnapshot = c.caseNo;
+                partiesSnapshot = c.parties;
+            }
             const expensePayload = {
                 fundId: fund._id,
                 date: String(date),
@@ -156,8 +174,24 @@ const createExpense = async (req, res) => {
                 expensePayload.vendor = String(vendor).trim();
             if (note)
                 expensePayload.note = String(note).trim();
+            if (receiptRef)
+                expensePayload.receiptRef = String(receiptRef).trim();
+            if (refundAmount !== undefined && refundAmount !== null && String(refundAmount) !== '') {
+                const r = Number(refundAmount);
+                if (Number.isFinite(r) && r >= 0)
+                    expensePayload.refundAmount = r;
+            }
+            if (refundedBy)
+                expensePayload.refundedBy = String(refundedBy).trim();
             if (receiptUrl)
                 expensePayload.receiptUrl = receiptUrl;
+            expensePayload.chargeType = normalizedChargeType;
+            if (resolvedCaseObjectId)
+                expensePayload.caseId = resolvedCaseObjectId;
+            if (caseNoSnapshot)
+                expensePayload.caseNoSnapshot = String(caseNoSnapshot);
+            if (partiesSnapshot)
+                expensePayload.partiesSnapshot = String(partiesSnapshot);
             if (actor.actorUserId) {
                 expensePayload.createdByUserId = new mongoose_1.default.Types.ObjectId(actor.actorUserId);
             }
@@ -175,7 +209,7 @@ const createExpense = async (req, res) => {
                 notification: {
                     type: 'PETTY_CASH_EXPENSE',
                     title: 'Petty Cash Expense Recorded',
-                    message: `${actor.actorName} recorded an expense of RWF ${amt.toLocaleString()} (${String(title).trim()}).`,
+                    message: `${actor.actorName} recorded an expense of RWF ${amt.toLocaleString()} (${String(title).trim()})${caseNoSnapshot ? ` • Case: ${caseNoSnapshot}` : ''}.`,
                     fundId: String(fund._id),
                     expenseId: String(expense._id),
                     severity: 'info',
@@ -226,6 +260,13 @@ const createExpense = async (req, res) => {
     }
     catch (err) {
         const msg = String(err?.message || '');
+        if (msg === 'CASE_REQUIRED') {
+            return res.status(400).json({ message: 'Select a case when marking an expense as client-related.' });
+        }
+        if (msg === 'INVALID_CASE')
+            return res.status(400).json({ message: 'Invalid case selected.' });
+        if (msg === 'CASE_NOT_FOUND')
+            return res.status(404).json({ message: 'Selected case not found.' });
         if (msg === 'FUND_NOT_FOUND')
             return res.status(404).json({ message: 'Fund not found.' });
         if (msg === 'FUND_NOT_ACTIVE')

@@ -40,12 +40,20 @@ const PettyCashExpenseSchema = new mongoose_1.Schema({
     title: { type: String, required: true, trim: true },
     category: { type: String },
     vendor: { type: String },
+    chargeType: { type: String, enum: ['internal', 'client'], default: 'internal' },
+    caseId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Case' },
+    caseNoSnapshot: { type: String, trim: true },
+    partiesSnapshot: { type: String, trim: true },
     amount: { type: Number, required: true, min: 0.01 },
     note: { type: String },
+    receiptRef: { type: String, trim: true },
     receiptUrl: { type: String },
+    refundAmount: { type: Number, min: 0 },
+    refundedBy: { type: String, trim: true },
     createdByUserId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User' },
     createdByName: { type: String, required: true },
 }, { timestamps: true });
 PettyCashExpenseSchema.index({ fundId: 1, date: -1, createdAt: -1 });
+PettyCashExpenseSchema.index({ chargeType: 1, caseId: 1, date: -1 });
 exports.default = mongoose_1.default.model('PettyCashExpense', PettyCashExpenseSchema);
 //# sourceMappingURL=pettyCashExpenseModel.js.map

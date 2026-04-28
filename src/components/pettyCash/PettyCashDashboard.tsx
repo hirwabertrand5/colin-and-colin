@@ -22,6 +22,7 @@ import {
   PettyCashExpense,
   PettyCashFund,
 } from '../../services/pettyCashService';
+import { CaseData, getAllCases } from '../../services/caseService';
 
 const API_URL = import.meta.env.VITE_API_URL;
 const BACKEND_URL = API_URL ? API_URL.replace(/\/api\/?$/, '') : '';
@@ -40,13 +41,17 @@ export default function PettyCashDashboard() {
 
   // Add expense modal
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [cases, setCases] = useState<CaseData[]>([]);
   const [expenseForm, setExpenseForm] = useState({
     date: '',
     title: '',
-    case: '',
-    receipt: '',
+    category: '',
+    vendor: '',
+    chargeType: 'internal' as const,
+    caseId: '',
     amount: '',
     note: '',
+    receiptRef: '',
     refundAmount: '',
     refundedBy: '',
     receiptFile: null as File | null,
@@ -78,8 +83,9 @@ export default function PettyCashDashboard() {
     try {
       setLoading(true);
       setError('');
-      const active = await getActivePettyCashFund();
+      const [active, allCases] = await Promise.all([getActivePettyCashFund(), getAllCases().catch(() => [])]);
       setFund(active);
+      setCases(allCases);
 
       if (active?._id) {
         const ex = await listExpensesForFund(active._id);
@@ -137,14 +143,21 @@ export default function PettyCashDashboard() {
         setError('Provide date, title and a valid amount.');
         return;
       }
+      if (expenseForm.chargeType === 'client' && !expenseForm.caseId) {
+        setError('Select the related case for a client-related expense.');
+        return;
+      }
 
       await addExpenseToFund(fund._id, {
         date: expenseForm.date,
         title: expenseForm.title.trim(),
         amount,
-        case: expenseForm.case.trim() || undefined,
-        receipt: expenseForm.receipt.trim() || undefined,
+        category: expenseForm.category.trim() || undefined,
+        vendor: expenseForm.vendor.trim() || undefined,
+        chargeType: expenseForm.chargeType,
+        caseId: expenseForm.chargeType === 'client' ? expenseForm.caseId : undefined,
         note: expenseForm.note.trim() || undefined,
+        receiptRef: expenseForm.receiptRef.trim() || undefined,
         refundAmount: expenseForm.refundAmount ? Number(String(expenseForm.refundAmount).replace(/[^\d.]/g, '')) : undefined,
         refundedBy: expenseForm.refundedBy.trim() || undefined,
         receiptFile: expenseForm.receiptFile,
@@ -154,10 +167,13 @@ export default function PettyCashDashboard() {
       setExpenseForm({
         date: '',
         title: '',
-        case: '',
-        receipt: '',
+        category: '',
+        vendor: '',
+        chargeType: 'internal',
+        caseId: '',
         amount: '',
         note: '',
+        receiptRef: '',
         refundAmount: '',
         refundedBy: '',
         receiptFile: null,
@@ -369,17 +385,29 @@ export default function PettyCashDashboard() {
                           <span className="text-xs text-gray-400">{idx + 1}.</span>
                           <p className="text-sm font-medium text-gray-900">{ex.title}</p>
 
-                          {ex.case ? (
+                          {ex.chargeType === 'client' ? (
+                            <span className="px-2 py-0.5 text-xs rounded bg-blue-50 text-blue-700 border border-blue-200">
+                              Client-related
+                            </span>
+                          ) : null}
+
+                          {ex.caseNoSnapshot ? (
                             <span className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">
-                              Case: {ex.case}
+                              Case: {ex.caseNoSnapshot}
                             </span>
                           ) : null}
                         </div>
 
                         <p className="text-xs text-gray-500 mb-1">
                           {ex.date} • By {ex.createdByName}
-                          {ex.receipt ? ` • Receipt: ${ex.receipt}` : ''}
+                          {ex.receiptRef ? ` • Receipt: ${ex.receiptRef}` : ''}
                         </p>
+
+                        {ex.partiesSnapshot ? (
+                          <p className="text-xs text-gray-600">
+                            Parties: <span className="font-medium">{ex.partiesSnapshot}</span>
+                          </p>
+                        ) : null}
 
                         {ex.note ? <p className="text-xs text-gray-600 mt-1">{ex.note}</p> : null}
 
@@ -550,24 +578,76 @@ export default function PettyCashDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Case</label>
-                  <input
-                    value={expenseForm.case}
-                    onChange={(e) => setExpenseForm((p) => ({ ...p, case: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded"
-                    placeholder="Case number or name"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Expense Type</label>
+                  <select
+                    value={expenseForm.chargeType}
+                    onChange={(e) =>
+                      setExpenseForm((p) => ({
+                        ...p,
+                        chargeType: (e.target.value === 'client' ? 'client' : 'internal') as 'internal' | 'client',
+                        caseId: e.target.value === 'client' ? p.caseId : '',
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+                  >
+                    <option value="internal">Internal (Firm)</option>
+                    <option value="client">Client-related (Case)</option>
+                  </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Receipt</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Receipt Reference</label>
                 <input
-                  value={expenseForm.receipt}
-                  onChange={(e) => setExpenseForm((p) => ({ ...p, receipt: e.target.value }))}
+                  value={expenseForm.receiptRef}
+                  onChange={(e) => setExpenseForm((p) => ({ ...p, receiptRef: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
-                  placeholder="Receipt number or reference"
+                  placeholder="Receipt number / reference"
                 />
+              </div>
+
+              {expenseForm.chargeType === 'client' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Related Case *</label>
+                  <select
+                    value={expenseForm.caseId}
+                    onChange={(e) => setExpenseForm((p) => ({ ...p, caseId: e.target.value }))}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+                  >
+                    <option value="" disabled>
+                      Select a case…
+                    </option>
+                    {cases.map((c) => (
+                      <option key={String(c._id)} value={String(c._id)}>
+                        {c.caseNo} — {c.parties}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">This helps reporting and client reimbursements.</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <input
+                    value={expenseForm.category}
+                    onChange={(e) => setExpenseForm((p) => ({ ...p, category: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded"
+                    placeholder="Transport, Stationery…"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vendor</label>
+                  <input
+                    value={expenseForm.vendor}
+                    onChange={(e) => setExpenseForm((p) => ({ ...p, vendor: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded"
+                    placeholder="Supplier / shop name"
+                  />
+                </div>
               </div>
 
               <div>

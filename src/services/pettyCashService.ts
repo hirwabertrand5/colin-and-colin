@@ -27,10 +27,16 @@ export interface PettyCashExpense {
   fundId: string;
   date: string;
   title: string;
-  case?: string;
-  receipt?: string;
+  category?: string;
+  vendor?: string;
+
+  chargeType?: 'internal' | 'client';
+  caseId?: string;
+  caseNoSnapshot?: string;
+  partiesSnapshot?: string;
   amount: number;
   note?: string;
+  receiptRef?: string;
   refundAmount?: number;
   refundedBy?: string;
   receiptUrl?: string;
@@ -106,9 +112,12 @@ export const addExpenseToFund = async (
     date: string;
     title: string;
     amount: number;
-    case?: string;
-    receipt?: string;
+    category?: string;
+    vendor?: string;
+    chargeType?: 'internal' | 'client';
+    caseId?: string;
     note?: string;
+    receiptRef?: string;
     refundAmount?: number;
     refundedBy?: string;
     receiptFile?: File | null;
@@ -118,9 +127,12 @@ export const addExpenseToFund = async (
   form.append('date', payload.date);
   form.append('title', payload.title);
   form.append('amount', String(payload.amount));
-  if (payload.case) form.append('case', payload.case);
-  if (payload.receipt) form.append('receipt', payload.receipt);
+  if (payload.category) form.append('category', payload.category);
+  if (payload.vendor) form.append('vendor', payload.vendor);
+  if (payload.chargeType) form.append('chargeType', payload.chargeType);
+  if (payload.caseId) form.append('caseId', payload.caseId);
   if (payload.note) form.append('note', payload.note);
+  if (payload.receiptRef) form.append('receiptRef', payload.receiptRef);
   if (payload.refundAmount) form.append('refundAmount', String(payload.refundAmount));
   if (payload.refundedBy) form.append('refundedBy', payload.refundedBy);
   if (payload.receiptFile) form.append('file', payload.receiptFile);
