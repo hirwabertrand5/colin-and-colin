@@ -315,10 +315,57 @@ export const LEGAL_SERVICES_TREE: ServiceNode[] = [
       },
       {
         id: 'regulatory_compliance',
-        label: 'Regulatory & Compliance',
+        label: 'Regulatory, Compliance & Governance',
         caseType: 'Transactional Cases',
         children: [
-          { id: 'corporate_compliance_programs', label: 'Corporate Compliance Programs', caseType: 'Transactional Cases' },
+          {
+            id: 'entity_formation_regulatory_registration',
+            label: 'Entity Formation & Regulatory Registration',
+            caseType: 'Transactional Cases',
+            children: [
+              {
+                id: 'company_incorporation',
+                label: 'Company Incorporation',
+                caseType: 'Transactional Cases',
+                suggestedMatterTypes: ['Business Registration'],
+              },
+              {
+                id: 'ngo_registration',
+                label: 'NGO Registration',
+                caseType: 'Transactional Cases',
+                suggestedMatterTypes: ['NGO Registration'],
+              },
+              {
+                id: 'foundation_non_profit_incorporation',
+                label: 'Foundation / Non-Profit Incorporation',
+                caseType: 'Transactional Cases',
+                suggestedMatterTypes: ['Business Registration'],
+              },
+              {
+                id: 'cooperative_registration',
+                label: 'Cooperative Registration',
+                caseType: 'Transactional Cases',
+                suggestedMatterTypes: ['Business Registration'],
+              },
+              {
+                id: 'associations',
+                label: 'Associations',
+                caseType: 'Transactional Cases',
+                suggestedMatterTypes: ['Business Registration'],
+              },
+              {
+                id: 'tontines',
+                label: 'Tontines',
+                caseType: 'Transactional Cases',
+                suggestedMatterTypes: ['Tontine Registration'],
+              },
+            ],
+          },
+          {
+            id: 'corporate_compliance_programs',
+            label: 'Corporate Compliance Programs',
+            caseType: 'Transactional Cases',
+          },
           { id: 'risk_management_frameworks', label: 'Risk Management Frameworks', caseType: 'Transactional Cases' },
           { id: 'licensing_approvals', label: 'Licensing & Approvals', caseType: 'Transactional Cases' },
           { id: 'esg_sustainability_compliance', label: 'ESG & Sustainability Compliance', caseType: 'Transactional Cases' },

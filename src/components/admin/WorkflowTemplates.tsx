@@ -55,14 +55,14 @@ export default function WorkflowTemplates() {
     try {
       setErr('');
       const blank = {
-  name: 'New Template',
-  matterType: 'New Matter Type',
-  caseType: 'Transactional Cases' as const,
-  version: 1,
-  active: true,
-  stages: [],
-  steps: [],
-};
+        name: 'New Template',
+        matterType: 'New Matter Type',
+        caseType: 'Transactional Cases' as const,
+        version: 1,
+        active: true,
+        stages: [],
+        steps: [],
+      };
       await createWorkflowTemplate(blank);
       await load();
     } catch (e: any) {

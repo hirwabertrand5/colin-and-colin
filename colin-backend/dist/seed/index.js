@@ -8,6 +8,9 @@ const seedCommercialWorkflow_1 = require("./seedCommercialWorkflow");
 const seedLaborProcedure_1 = require("./seedLaborProcedure");
 const seedBusinessRegistration_1 = require("./seedBusinessRegistration");
 const seedCriminalProcedure_1 = require("./seedCriminalProcedure");
+const seedTontineRegistration_1 = require("./seedTontineRegistration");
+const seedDataProtectionLicenses_1 = require("./seedDataProtectionLicenses");
+const seedImmigration_1 = require("./seedImmigration");
 const seedAllWorkflowTemplates = async () => {
     await (0, seedDueDiligence_1.seedDueDiligenceTemplate)();
     await (0, seedNGORegistration_1.seedNGORegistrationTemplate)();
@@ -16,6 +19,9 @@ const seedAllWorkflowTemplates = async () => {
     await (0, seedLaborProcedure_1.seedLaborProcedureTemplate)();
     await (0, seedBusinessRegistration_1.seedBusinessRegistrationTemplate)();
     await (0, seedCriminalProcedure_1.seedCriminalProcedureTemplate)();
+    await (0, seedTontineRegistration_1.seedTontineRegistrationTemplate)();
+    await (0, seedDataProtectionLicenses_1.seedDataProtectionLicensesTemplate)();
+    await (0, seedImmigration_1.seedImmigrationTemplate)();
 };
 exports.seedAllWorkflowTemplates = seedAllWorkflowTemplates;
 //# sourceMappingURL=index.js.map
