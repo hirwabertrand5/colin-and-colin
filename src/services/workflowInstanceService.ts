@@ -53,6 +53,15 @@ export const completeWorkflowStep = async (caseId: string, stepKey: string): Pro
   return res.json();
 };
 
+export const reopenWorkflowStep = async (caseId: string, stepKey: string): Promise<WorkflowInstance> => {
+  const res = await fetch(`${API_URL}/workflows/cases/${caseId}/steps/${stepKey}/reopen`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) throw new Error((await res.json()).message || 'Failed to reopen step');
+  return res.json();
+};
+
 export const extendWorkflowStepDeadline = async (
   caseId: string,
   stepKey: string,

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Upload, CheckCircle, CalendarPlus } from 'lucide-react';
+import { Upload, CalendarPlus } from 'lucide-react';
 import {
   getWorkflowForCase,
   completeWorkflowStep,
+  reopenWorkflowStep,
   extendWorkflowStepDeadline,
   WorkflowInstance,
 } from '../../services/workflowInstanceService';
@@ -124,6 +125,21 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
     }
   };
 
+  const onReopenStep = async (stepKey: string) => {
+    if (!canCompleteSteps) return;
+    try {
+      setBusyKey(`complete:${stepKey}`);
+      setErr('');
+      const updated = await reopenWorkflowStep(caseId, stepKey);
+      setWf(updated);
+      await onWorkflowChanged?.();
+    } catch (e: any) {
+      setErr(e.message || 'Failed to reopen step');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
   const onExtendDeadline = async (stepKey: string) => {
     if (!canExtendDeadlines) return;
     const days = Number(extendDays);
@@ -177,13 +193,37 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
         <div className="mt-3">{templatePill}</div>
       </div>
 
-      {steps.map((s) => (
-        <div key={s.stepKey} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+      {steps.map((s, index, arr) => {
+        // Check if previous step is completed (or this is the first step)
+        const previousStepCompleted = index === 0 || (arr[index - 1]?.status === 'Completed');
+        
+        // Check if step has required deliverables that are not uploaded
+        const hasMissingRequiredOutputs = (s.outputs || []).some((o) => o.required && !o.documentId);
+        
+        // Determine if checkbox should be disabled for completing
+        const isCompleted = s.status === 'Completed';
+        const isLoading = busyKey === `complete:${s.stepKey}`;
+        const cannotComplete = !isCompleted && (!previousStepCompleted || hasMissingRequiredOutputs);
+        
+        // Build tooltip message
+        let tooltipMessage = '';
+        if (isCompleted) {
+          tooltipMessage = 'Click to reopen step';
+        } else if (!previousStepCompleted) {
+          tooltipMessage = 'Complete previous steps first';
+        } else if (hasMissingRequiredOutputs) {
+          tooltipMessage = 'Upload required deliverables first';
+        } else {
+          tooltipMessage = 'Click to mark as complete';
+        }
+
+        return (
+        <div key={s.stepKey} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <div>
-              <div className="text-xs text-gray-500">{s.stepKey}</div>
-              <div className="font-semibold text-gray-900">{s.title}</div>
-              <div className="text-sm text-gray-600">Status: {s.status}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">{s.stepKey}</div>
+              <div className="font-semibold text-gray-900 dark:text-gray-100">{s.title}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Status: {s.status}</div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span
                   className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${getUrgencyClass(
@@ -193,28 +233,41 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
                 >
                   {formatDueCountdown(s.dueAt)}
                 </span>
-                {s.dueAt ? (
-                  <span className="text-xs text-gray-500">Due {new Date(s.dueAt).toLocaleDateString()}</span>
-                ) : null}
-                {typeof s.feeAmount === 'number' ? (
-                  <span className="text-xs text-gray-700">Fee: {`${s.feeCurrency || 'RWF'} ${Math.round(s.feeAmount).toLocaleString()}`}</span>
-                ) : s.feeText ? (
-                  <span className="text-xs text-gray-700">Fee: {s.feeText}</span>
-                ) : null}
-                {s.slaMinutes ? (
-                  <span className="text-xs text-gray-500">Duration: {Math.round(s.slaMinutes / 60)}h</span>
-                ) : s.slaText ? (
-                  <span className="text-xs text-gray-500">Duration: {s.slaText}</span>
-                ) : null}
+                {hasMissingRequiredOutputs && (
+                  <span className="text-xs text-red-600 dark:text-red-400" title="Missing required deliverables">
+                    ⚠ Required deliverables pending
+                  </span>
+                )}
+                {!previousStepCompleted && !isCompleted && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400" title="Previous steps must be completed first">
+                    ← Complete previous steps first
+                  </span>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col items-end gap-1">
+                {s.dueAt ? (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Due {new Date(s.dueAt).toLocaleDateString()}</span>
+                ) : null}
+                {typeof s.feeAmount === 'number' ? (
+                  <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">Fee: {`${s.feeCurrency || 'RWF'} ${Math.round(s.feeAmount).toLocaleString()}`}</span>
+                ) : s.feeText ? (
+                  <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">Fee: {s.feeText}</span>
+                ) : null}
+                {s.slaMinutes ? (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Duration: {Math.round(s.slaMinutes / 60)}h</span>
+                ) : s.slaText ? (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Duration: {s.slaText}</span>
+                ) : null}
+              </div>
+
               {canExtendDeadlines && s.status !== 'Completed' && (
                 <button
                   type="button"
                   onClick={() => setExtendOpenFor((k) => (k === s.stepKey ? '' : s.stepKey))}
-                  className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                  className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded"
                   title="Extend deadline"
                 >
                   <CalendarPlus className="w-4 h-4" />
@@ -224,12 +277,26 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
 
               {canCompleteSteps && (
                 <button
-                  disabled={busyKey === `complete:${s.stepKey}` || s.status === 'Completed'}
-                  onClick={() => onCompleteStep(s.stepKey)}
-                  className="inline-flex items-center gap-2 px-3 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-60"
+                  disabled={isLoading || cannotComplete}
+                  onClick={() => {
+                    if (isCompleted) {
+                      onReopenStep(s.stepKey);
+                    } else {
+                      onCompleteStep(s.stepKey);
+                    }
+                  }}
+                  className="flex items-center justify-center w-10 h-10 rounded-lg bg-green-50 dark:bg-gray-700 border-2 border-green-600 dark:border-green-400 shadow-sm hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={tooltipMessage}
                 >
-                  <CheckCircle className="w-4 h-4" />
-                  Complete Step
+                  {isCompleted ? (
+                    <div className="w-6 h-6 bg-green-500 rounded flex items-center justify-center border-2 border-green-700 shadow-sm">
+                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  ) : (
+                    <div className="w-6 h-6 rounded bg-green-50 dark:bg-gray-600 border-2 border-green-500 dark:border-green-400 shadow-inner" />
+                  )}
                 </button>
               )}
             </div>
@@ -325,7 +392,8 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

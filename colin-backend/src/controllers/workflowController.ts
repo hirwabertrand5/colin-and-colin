@@ -370,6 +370,88 @@ export const completeStep = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// Reopen a completed step (admin only)
+export const reopenStep = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isAdmin(req.user?.role)) return res.status(403).json({ message: 'Forbidden.' });
+
+    const { caseId, stepKey } = req.params as any;
+
+    const c: any = await Case.findById(caseId);
+    if (!c) return res.status(404).json({ message: 'Case not found.' });
+
+    const inst: any = await WorkflowInstance.findOne({ caseId: c._id });
+    if (!inst) return res.status(404).json({ message: 'Workflow instance not found.' });
+
+    const step = (inst.steps || []).find((s: any) => s.stepKey === stepKey);
+    if (!step) return res.status(404).json({ message: 'Step not found.' });
+    if (step.status !== 'Completed') return res.status(400).json({ message: 'Step is not completed.' });
+
+    // Reopen the step
+    step.status = 'In Progress';
+    step.completedAt = undefined;
+
+    // Update current step to this one
+    inst.currentStepKey = stepKey;
+
+    // If workflow was completed, set it back to Active
+    if (inst.status === 'Completed') {
+      inst.status = 'Active';
+    }
+
+    await inst.save();
+
+    const completedCount = inst.steps.filter((s: any) => s.status === 'Completed').length;
+    const total = inst.steps.length || 1;
+    const percent = Math.round((completedCount / total) * 100);
+
+    const plannedAmount = (inst.steps || []).reduce(
+      (sum: number, s: any) => sum + (typeof s.feeAmount === 'number' ? s.feeAmount : 0),
+      0
+    );
+    const completedAmount = (inst.steps || []).reduce(
+      (sum: number, s: any) => sum + (s.status === 'Completed' && typeof s.feeAmount === 'number' ? s.feeAmount : 0),
+      0
+    );
+    const currency = (inst.steps || []).map((s: any) => s.feeCurrency).find(Boolean);
+
+    const nextDueAt = (() => {
+      const pending = (inst.steps || [])
+        .filter((s: any) => s.status !== 'Completed')
+        .slice()
+        .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))[0];
+      return pending?.dueAt;
+    })();
+
+    c.workflowProgress = {
+      status: 'In Progress',
+      currentStepKey: inst.currentStepKey,
+      currentStepTitle: step.title,
+      currentStepStartAt: step.startAt,
+      currentStepDueAt: step.dueAt,
+      percent,
+      nextDueAt,
+      plannedValue: { amount: plannedAmount || undefined, currency },
+      completedValue: { amount: completedAmount || undefined, currency },
+    };
+    await c.save();
+
+    const actor = actorFromReq(req);
+    await writeAudit({
+      caseId: String(c._id),
+      actorName: actor.actorName,
+      ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
+      action: 'WORKFLOW_STEP_REOPENED',
+      message: 'Reopened workflow step',
+      detail: `${stepKey} • ${step.title}`,
+    });
+
+    res.json(inst);
+  } catch {
+    res.status(500).json({ message: 'Failed to reopen step.' });
+  }
+};
+
 // Extend a workflow step deadline (admin only)
 export const extendStepDeadline = async (req: AuthRequest, res: Response) => {
   try {

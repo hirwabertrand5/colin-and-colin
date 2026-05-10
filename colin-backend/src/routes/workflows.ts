@@ -11,6 +11,7 @@ import {
   initWorkflowForCase,
   attachOutputDocument,
   completeStep,
+  reopenStep,
   extendStepDeadline,
 } from '../controllers/workflowController';
 
@@ -42,6 +43,14 @@ router.post(
   authenticate,
   authorize(ADMIN_ROLES),
   completeStep
+);
+
+// Step reopening (admin only)
+router.post(
+  '/cases/:caseId/steps/:stepKey/reopen',
+  authenticate,
+  authorize(ADMIN_ROLES),
+  reopenStep
 );
 
 // Deadline extension (admin only)
