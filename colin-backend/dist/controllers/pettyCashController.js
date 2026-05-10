@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.addRefundToExpense = exports.deleteExpense = exports.createExpense = exports.listExpensesForFund = exports.closeActiveFund = exports.createFund = exports.listFunds = exports.getActiveFund = void 0;
+exports.addRefundToExpense = exports.deleteExpense = exports.createExpense = exports.listExpensesForCase = exports.listExpensesForFund = exports.closeActiveFund = exports.createFund = exports.listFunds = exports.getActiveFund = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const pettyCashFundModel_1 = __importDefault(require("../models/pettyCashFundModel"));
 const pettyCashExpenseModel_1 = __importDefault(require("../models/pettyCashExpenseModel"));
@@ -122,6 +122,23 @@ const listExpensesForFund = async (req, res) => {
     }
 };
 exports.listExpensesForFund = listExpensesForFund;
+const listExpensesForCase = async (req, res) => {
+    try {
+        const caseId = Array.isArray(req.params.caseId) ? req.params.caseId[0] : req.params.caseId;
+        if (!caseId)
+            return res.status(400).json({ message: 'Missing caseId.' });
+        if (!mongoose_1.default.Types.ObjectId.isValid(String(caseId)))
+            return res.status(400).json({ message: 'Invalid caseId.' });
+        const expenses = await pettyCashExpenseModel_1.default.find({ caseId: new mongoose_1.default.Types.ObjectId(String(caseId)) })
+            .sort({ date: -1, createdAt: -1 })
+            .limit(500);
+        res.json(expenses);
+    }
+    catch {
+        res.status(500).json({ message: 'Failed to fetch case expenses.' });
+    }
+};
+exports.listExpensesForCase = listExpensesForCase;
 const createExpense = async (req, res) => {
     const session = await mongoose_1.default.startSession();
     try {

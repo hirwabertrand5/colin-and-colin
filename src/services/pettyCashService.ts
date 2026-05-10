@@ -109,6 +109,14 @@ export const listExpensesForFund = async (fundId: string): Promise<PettyCashExpe
   return res.json();
 };
 
+export const listExpensesForCase = async (caseId: string): Promise<PettyCashExpense[]> => {
+  const res = await fetch(`${API_URL}/petty-cash/cases/${caseId}/expenses`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  await handleAuth(res);
+  return res.json();
+};
+
 export const addExpenseToFund = async (
   fundId: string,
   payload: {

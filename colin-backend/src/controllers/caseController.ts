@@ -71,6 +71,29 @@ export const createCase = async (req: AuthRequest, res: Response) => {
     }
 
     const newCase = new Case(req.body);
+
+    // Normalize billing settings if provided
+    const bs = (req.body as any)?.billingSettings;
+    if (bs && typeof bs === 'object') {
+      const paymentMode = String(bs.paymentMode || 'postpaid') === 'prepaid' ? 'prepaid' : 'postpaid';
+      const currency = String(bs.currency || 'RWF').trim().toUpperCase() || 'RWF';
+      const prepaidTotal = Number(bs.prepaidTotal);
+      const normalizedPrepaidTotal = Number.isFinite(prepaidTotal) && prepaidTotal > 0 ? prepaidTotal : 0;
+
+      (newCase as any).billingSettings = {
+        paymentMode,
+        currency,
+        prepaidTotal: normalizedPrepaidTotal,
+        prepaidRemaining:
+          paymentMode === 'prepaid'
+            ? Number.isFinite(Number(bs.prepaidRemaining))
+              ? Math.max(0, Number(bs.prepaidRemaining))
+              : normalizedPrepaidTotal
+            : 0,
+        accruedUnbilled: 0,
+      };
+    }
+
     await newCase.save();
 
     // ✅ Initialize workflow instance if workflowTemplateId provided
@@ -102,6 +125,9 @@ export const createCase = async (req: AuthRequest, res: Response) => {
           status: 'In Progress',
           percent: 0,
           ...(inst.currentStepKey ? { currentStepKey: inst.currentStepKey } : {}),
+          ...(steps[0]?.title ? { currentStepTitle: steps[0].title } : {}),
+          ...(steps[0]?.startAt ? { currentStepStartAt: steps[0].startAt } : {}),
+          ...(steps[0]?.dueAt ? { currentStepDueAt: steps[0].dueAt } : {}),
           nextDueAt: steps[0]?.dueAt,
           plannedValue: { amount: plannedAmount || undefined, currency: plannedCurrency },
           completedValue: { amount: 0, currency: plannedCurrency },
@@ -169,6 +195,66 @@ export const updateCase = async (req: AuthRequest, res: Response) => {
 
     if (!updated) return res.status(404).json({ message: 'Case not found.' });
 
+    // If workflow template was changed, re-initialize the workflow instance and progress
+    const beforeTemplateId = before?.workflowTemplateId ? String(before.workflowTemplateId) : '';
+    const nextTemplateId = (req.body as any)?.workflowTemplateId ? String((req.body as any).workflowTemplateId) : '';
+    const didChangeTemplate = Boolean(nextTemplateId && nextTemplateId !== beforeTemplateId);
+    const didChangeStartDate = Boolean((req.body as any)?.workflowStartDate);
+
+    if (didChangeTemplate || didChangeStartDate) {
+      const templateIdToUse = nextTemplateId || beforeTemplateId;
+      if (templateIdToUse) {
+        const template: any = await WorkflowTemplate.findById(templateIdToUse).lean();
+        if (template) {
+          const wfStartRaw = (req.body as any)?.workflowStartDate || updated.workflowStartDate || updated.createdAt || new Date();
+          const wfStart = wfStartRaw instanceof Date ? wfStartRaw : new Date(wfStartRaw);
+          const steps = buildInstanceSteps(template, wfStart);
+
+          let inst: any = await WorkflowInstance.findOne({ caseId: updated._id });
+          if (!inst) {
+            inst = await WorkflowInstance.create({
+              caseId: updated._id,
+              templateId: template._id,
+              status: 'Active',
+              currentStepKey: steps[0]?.stepKey,
+              steps,
+            });
+          } else {
+            inst.templateId = template._id;
+            inst.status = 'Active';
+            inst.currentStepKey = steps[0]?.stepKey;
+            inst.steps = steps;
+            await inst.save();
+          }
+
+          updated.workflowTemplateId = template._id as any;
+          updated.workflowInstanceId = inst._id as any;
+          updated.matterType = template.matterType;
+          updated.workflowStartDate = wfStart;
+
+          const plannedAmount = steps.reduce(
+            (sum: number, s: any) => sum + (typeof s.feeAmount === 'number' ? s.feeAmount : 0),
+            0
+          );
+          const plannedCurrency = steps.map((s: any) => s.feeCurrency).find(Boolean);
+
+          updated.workflowProgress = {
+            status: 'In Progress',
+            percent: 0,
+            ...(inst.currentStepKey ? { currentStepKey: inst.currentStepKey } : {}),
+            ...(steps[0]?.title ? { currentStepTitle: steps[0].title } : {}),
+            ...(steps[0]?.startAt ? { currentStepStartAt: steps[0].startAt } : {}),
+            ...(steps[0]?.dueAt ? { currentStepDueAt: steps[0].dueAt } : {}),
+            nextDueAt: steps[0]?.dueAt,
+            plannedValue: { amount: plannedAmount || undefined, currency: plannedCurrency },
+            completedValue: { amount: 0, currency: plannedCurrency },
+          };
+
+          await updated.save();
+        }
+      }
+    }
+
     const changes: string[] = [];
     if (before) {
       if (req.body.status && req.body.status !== before.status)
@@ -184,6 +270,10 @@ export const updateCase = async (req: AuthRequest, res: Response) => {
       if (req.body.caseType && req.body.caseType !== before.caseType) changes.push(`Case type changed`);
       if (req.body.matterType && req.body.matterType !== before.matterType) changes.push(`Matter type changed`);
       if (req.body.legalServicePath) changes.push(`Legal service classification updated`);
+      if ((req.body as any)?.workflowTemplateId && String((req.body as any).workflowTemplateId) !== beforeTemplateId)
+        changes.push(`Workflow template updated`);
+      if ((req.body as any)?.workflowStartDate) changes.push(`Workflow start date updated`);
+      if ((req.body as any)?.billingSettings) changes.push(`Billing settings updated`);
     }
 
     const actor = actorFromReq(req);

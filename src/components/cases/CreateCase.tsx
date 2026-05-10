@@ -16,6 +16,7 @@ const API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5000/a
 const getToken = () => localStorage.getItem('token');
 
 const SERVICE_LEVEL_LABELS = ['Legal Service', 'Category', 'Practice Area', 'Service Line', 'Sub-category', 'Detail'];
+const CREATE_CASE_DRAFT_KEY = 'createCaseDraft:v1';
 
 export default function CreateCase() {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export default function CreateCase() {
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [draftNotice, setDraftNotice] = useState<string>('');
 
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
@@ -48,6 +50,14 @@ export default function CreateCase() {
     budget: '',
     workflowTemplateId: '',
     workflowStartDate: new Date().toISOString().slice(0, 10),
+
+    billingSettings: {
+      paymentMode: 'postpaid',
+      currency: 'RWF',
+      prepaidTotal: 0,
+      prepaidRemaining: 0,
+      accruedUnbilled: 0,
+    },
   });
 
   const statuses = [
@@ -61,6 +71,42 @@ export default function CreateCase() {
     'Cope of Judgement',
     'Execution',
   ];
+
+  // Load draft (local-only)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CREATE_CASE_DRAFT_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.formData) setFormData((prev) => ({ ...prev, ...parsed.formData }));
+      if (Array.isArray(parsed?.servicePath)) setServicePath(parsed.servicePath);
+      if (typeof parsed?.step === 'number') setStep(parsed.step);
+      setDraftNotice('Loaded your saved draft.');
+      setTimeout(() => setDraftNotice(''), 2500);
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const saveDraft = () => {
+    try {
+      localStorage.setItem(
+        CREATE_CASE_DRAFT_KEY,
+        JSON.stringify({
+          step,
+          servicePath,
+          formData,
+          savedAt: new Date().toISOString(),
+        })
+      );
+      setDraftNotice('Draft saved on this device.');
+      setTimeout(() => setDraftNotice(''), 2500);
+    } catch {
+      setDraftNotice('Failed to save draft.');
+      setTimeout(() => setDraftNotice(''), 2500);
+    }
+  };
 
   useEffect(() => {
     const fetchStaff = async () => {
@@ -462,6 +508,9 @@ export default function CreateCase() {
       {success && (
         <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">{success}</div>
       )}
+      {draftNotice && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded">{draftNotice}</div>
+      )}
 
       {/* Form Content */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
@@ -529,18 +578,10 @@ export default function CreateCase() {
                     <p className="text-xs text-red-600 mt-2">Please select a legal service path to continue.</p>
                   )}
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority *</label>
-                  <select
-                    value={formData.priority}
-                    onChange={(e) => handleInputChange('priority', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
-                  >
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                  </select>
+                <div className="rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Workflow</div>
+                  <div className="mt-2 text-sm font-semibold text-gray-900">{formData.workflow || '—'}</div>
+                  <div className="mt-1 text-xs text-gray-500">Auto-selected from Legal Service path.</div>
                 </div>
               </div>
 
@@ -608,52 +649,21 @@ export default function CreateCase() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Select Status *</label>
-              <select
-                value={formData.status}
-                onChange={(e) => handleInputChange('status', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
-              >
-                {statuses.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Workflow Template *</label>
-              <select
-                value={formData.workflowTemplateId || ''}
-                onChange={(e) => {
-                  const templateId = e.target.value;
-                  const t = templates.find((x) => x._id === templateId);
-
-                  setTemplateManuallySelected(Boolean(templateId));
-                  setFormData((prev) => ({
-                    ...prev,
-                    workflowTemplateId: templateId,
-                    // ✅ keep synchronized with template
-                    caseType: (t?.caseType as CaseType) || prev.caseType,
-                    workflow: t?.matterType || prev.workflow,
-                  }));
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
-                disabled={templatesLoading}
-              >
-                <option value="">{templatesLoading ? 'Loading templates...' : 'Select workflow template'}</option>
-                {templates.map((t) => (
-                  <option key={t._id} value={t._id}>
-                    {t.matterType}
-                  </option>
-                ))}
-              </select>
-
-              <p className="text-xs text-gray-500 mt-2">
-                Selecting a workflow template will generate SOP steps and required deliverables for this case.
-              </p>
+            <div className="rounded-lg border border-gray-200 bg-white p-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">Selected Workflow Template</div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    {selectedWorkflowTemplate?.name ? `${selectedWorkflowTemplate?.name} • ` : null}
+                    {selectedWorkflowTemplate?.matterType || (templatesLoading ? 'Loading…' : '—')}
+                  </div>
+                </div>
+                {!selectedWorkflowTemplate ? (
+                  <div className="text-xs text-red-600">
+                    No workflow template matched the selected Legal Service path. Update the Legal Service selection.
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             {selectedWorkflowTemplate ? (
@@ -735,6 +745,87 @@ export default function CreateCase() {
                 A workflow template will automatically generate deadlines, task handovers, and billing value for this case. You only need to select the start date and template.
               </div>
             </div>
+
+            <div className="rounded-lg border border-gray-200 bg-white p-4">
+              <div className="text-sm font-semibold text-gray-900 mb-3">Billing setup</div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment mode</label>
+                  <select
+                    value={formData.billingSettings?.paymentMode || 'postpaid'}
+                    onChange={(e) => {
+                      const paymentMode = e.target.value === 'prepaid' ? 'prepaid' : 'postpaid';
+                      setFormData((prev) => {
+                        const currency = prev.billingSettings?.currency || 'RWF';
+                        const prepaidTotal = Number(prev.billingSettings?.prepaidTotal) || 0;
+                        return {
+                          ...prev,
+                          billingSettings: {
+                            ...(prev.billingSettings || {}),
+                            paymentMode,
+                            currency,
+                            prepaidTotal: paymentMode === 'prepaid' ? prepaidTotal : 0,
+                            prepaidRemaining: paymentMode === 'prepaid' ? prepaidTotal : 0,
+                            accruedUnbilled: 0,
+                          },
+                        };
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900"
+                  >
+                    <option value="postpaid">Client pays later (postpaid)</option>
+                    <option value="prepaid">Client pays first (prepaid)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Prepaid will decrement as checklist items are completed. Postpaid will accrue unbilled fees.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                  <input
+                    value={formData.billingSettings?.currency || 'RWF'}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        billingSettings: {
+                          ...(prev.billingSettings || {}),
+                          currency: e.target.value.toUpperCase(),
+                        },
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900"
+                    placeholder="RWF"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Prepaid amount</label>
+                  <input
+                    value={String(formData.billingSettings?.prepaidTotal ?? '')}
+                    onChange={(e) => {
+                      const value = Number(String(e.target.value).replace(/[^\d.]/g, ''));
+                      setFormData((prev) => {
+                        const paymentMode = prev.billingSettings?.paymentMode || 'postpaid';
+                        const prepaidTotal = Number.isFinite(value) && value > 0 ? value : 0;
+                        return {
+                          ...prev,
+                          billingSettings: {
+                            ...(prev.billingSettings || {}),
+                            prepaidTotal,
+                            prepaidRemaining: paymentMode === 'prepaid' ? prepaidTotal : 0,
+                          },
+                        };
+                      });
+                    }}
+                    disabled={(formData.billingSettings?.paymentMode || 'postpaid') !== 'prepaid'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 disabled:opacity-60"
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">Only used for prepaid clients.</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -750,13 +841,18 @@ export default function CreateCase() {
                   ['Legal Service Path', formData.legalServicePath?.map((item) => item.label).join(' -> ') || 'Not selected'],
                   ['Case Type (computed)', formData.caseType],
                   ['Assigned To', formData.assignedTo],
-                  ['Priority', formData.priority],
-                  ['Status', formData.status],
                   ['Workflow Template', selectedWorkflowTemplate?.name || selectedWorkflowTemplate?.matterType || 'Not selected'],
                   ['Workflow Start Date', formData.workflowStartDate || 'Not set'],
                   ['Next expected deadline', workflowSummary?.nextDueAt ? workflowSummary.nextDueAt.toLocaleDateString() : 'TBD'],
                   ['Estimated completion', workflowSummary?.completionDate ? workflowSummary.completionDate.toLocaleDateString() : 'TBD'],
                   ['Planned workflow value', workflowSummary ? formatCurrency(workflowSummary.totalFee, workflowSummary.currency) : 'RWF 0'],
+                  ['Payment mode', formData.billingSettings?.paymentMode === 'prepaid' ? 'Prepaid' : 'Postpaid'],
+                  [
+                    'Prepaid amount',
+                    formData.billingSettings?.paymentMode === 'prepaid'
+                      ? formatCurrency(Number(formData.billingSettings?.prepaidTotal) || 0, formData.billingSettings?.currency || 'RWF')
+                      : '—',
+                  ],
                 ].map(([k, v]) => (
                   <div key={k} className="grid grid-cols-3 gap-4 py-3 border-b border-gray-200">
                     <span className="text-sm text-gray-600">{k}:</span>
@@ -794,6 +890,13 @@ export default function CreateCase() {
             className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Cancel
+          </button>
+          <button
+            type="button"
+            onClick={saveDraft}
+            className="px-4 py-2 rounded border border-blue-200 bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+          >
+            Save
           </button>
 
           {step < 3 ? (

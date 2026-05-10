@@ -11,6 +11,7 @@ import {
   initWorkflowForCase,
   attachOutputDocument,
   completeStep,
+  extendStepDeadline,
 } from '../controllers/workflowController';
 
 const router = express.Router();
@@ -41,6 +42,14 @@ router.post(
   authenticate,
   authorize(ADMIN_ROLES),
   completeStep
+);
+
+// Deadline extension (admin only)
+router.post(
+  '/cases/:caseId/steps/:stepKey/extend-deadline',
+  authenticate,
+  authorize(ADMIN_ROLES),
+  extendStepDeadline
 );
 
 export default router;

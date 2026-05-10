@@ -21,7 +21,8 @@ export type AuditAction =
   | 'WORKFLOW_TEMPLATE_DELETED'
   | 'WORKFLOW_INSTANCE_CREATED'
   | 'WORKFLOW_OUTPUT_UPLOADED'
-  | 'WORKFLOW_STEP_COMPLETED';
+  | 'WORKFLOW_STEP_COMPLETED'
+  | 'WORKFLOW_STEP_DEADLINE_EXTENDED';
 
 export interface IAuditLog extends Document {
   caseId: mongoose.Types.ObjectId;

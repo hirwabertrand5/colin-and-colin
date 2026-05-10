@@ -52,6 +52,9 @@ export interface ICase extends Document {
   workflowProgress?: {
     status?: 'Not Started' | 'In Progress' | 'Completed';
     currentStepKey?: string;
+    currentStepTitle?: string;
+    currentStepStartAt?: Date;
+    currentStepDueAt?: Date;
     percent?: number;
     nextDueAt?: Date;
     plannedValue?: {
@@ -62,6 +65,14 @@ export interface ICase extends Document {
       amount?: number;
       currency?: string;
     };
+  };
+
+  billingSettings?: {
+    paymentMode?: 'prepaid' | 'postpaid';
+    currency?: string;
+    prepaidTotal?: number;
+    prepaidRemaining?: number;
+    accruedUnbilled?: number;
   };
 
   clientContacts: IClientContact[];
@@ -139,6 +150,9 @@ const CaseSchema = new Schema<ICase>(
           default: 'Not Started',
         },
         currentStepKey: { type: String },
+        currentStepTitle: { type: String, trim: true },
+        currentStepStartAt: { type: Date },
+        currentStepDueAt: { type: Date },
         percent: { type: Number, min: 0, max: 100, default: 0 },
         nextDueAt: { type: Date },
         plannedValue: {
@@ -155,6 +169,17 @@ const CaseSchema = new Schema<ICase>(
           },
           default: {},
         },
+      },
+      default: {},
+    },
+
+    billingSettings: {
+      type: {
+        paymentMode: { type: String, enum: ['prepaid', 'postpaid'], default: 'postpaid' },
+        currency: { type: String, trim: true, default: 'RWF' },
+        prepaidTotal: { type: Number, min: 0, default: 0 },
+        prepaidRemaining: { type: Number, min: 0, default: 0 },
+        accruedUnbilled: { type: Number, min: 0, default: 0 },
       },
       default: {},
     },

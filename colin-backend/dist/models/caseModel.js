@@ -86,6 +86,9 @@ const CaseSchema = new mongoose_1.Schema({
                 default: 'Not Started',
             },
             currentStepKey: { type: String },
+            currentStepTitle: { type: String, trim: true },
+            currentStepStartAt: { type: Date },
+            currentStepDueAt: { type: Date },
             percent: { type: Number, min: 0, max: 100, default: 0 },
             nextDueAt: { type: Date },
             plannedValue: {
@@ -102,6 +105,16 @@ const CaseSchema = new mongoose_1.Schema({
                 },
                 default: {},
             },
+        },
+        default: {},
+    },
+    billingSettings: {
+        type: {
+            paymentMode: { type: String, enum: ['prepaid', 'postpaid'], default: 'postpaid' },
+            currency: { type: String, trim: true, default: 'RWF' },
+            prepaidTotal: { type: Number, min: 0, default: 0 },
+            prepaidRemaining: { type: Number, min: 0, default: 0 },
+            accruedUnbilled: { type: Number, min: 0, default: 0 },
         },
         default: {},
     },

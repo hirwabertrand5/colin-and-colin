@@ -46,10 +46,21 @@ export interface CaseData {
   workflowProgress?: {
     status?: 'Not Started' | 'In Progress' | 'Completed';
     currentStepKey?: string;
+    currentStepTitle?: string;
+    currentStepStartAt?: string;
+    currentStepDueAt?: string;
     percent?: number;
     nextDueAt?: string;
     plannedValue?: { amount?: number; currency?: string };
     completedValue?: { amount?: number; currency?: string };
+  };
+
+  billingSettings?: {
+    paymentMode?: 'prepaid' | 'postpaid';
+    currency?: string;
+    prepaidTotal?: number;
+    prepaidRemaining?: number;
+    accruedUnbilled?: number;
   };
 
   createdAt?: string;

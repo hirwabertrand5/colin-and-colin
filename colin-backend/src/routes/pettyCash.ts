@@ -6,6 +6,7 @@ import {
   createFund,
   closeActiveFund,
   listExpensesForFund,
+  listExpensesForCase,
   createExpense,
   deleteExpense,
   addRefundToExpense,
@@ -24,6 +25,7 @@ router.post('/funds/close', authenticate, authorize(ROLES), closeActiveFund);
 
 // Expenses
 router.get('/funds/:fundId/expenses', authenticate, authorize(ROLES), listExpensesForFund);
+router.get('/cases/:caseId/expenses', authenticate, authorize(ROLES), listExpensesForCase);
 
 // Optional receipt upload: multipart/form-data with "files" (multiple)
 router.post(

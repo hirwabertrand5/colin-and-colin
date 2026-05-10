@@ -1,20 +1,39 @@
 import { useEffect, useState } from 'react';
-import { Upload, CheckCircle } from 'lucide-react';
-import { getWorkflowForCase, completeWorkflowStep, WorkflowInstance } from '../../services/workflowInstanceService';
+import { Upload, CheckCircle, CalendarPlus } from 'lucide-react';
+import {
+  getWorkflowForCase,
+  completeWorkflowStep,
+  extendWorkflowStepDeadline,
+  WorkflowInstance,
+} from '../../services/workflowInstanceService';
 import { addDocumentToCase } from '../../services/documentService';
 import { attachWorkflowOutput } from '../../services/workflowOutputService';
+import { getWorkflowTemplateById, WorkflowTemplate } from '../../services/workflowService';
+import {
+  formatDueCountdown,
+  getDueRemainingRatio,
+  getUrgencyClass,
+  getUrgencyColorFromRatio,
+} from '../../utils/workflowDeadline';
 
 type Props = {
   caseId: string;
   canCompleteSteps: boolean;
   canUpload: boolean;
+  onWorkflowChanged?: () => void | Promise<void>;
 };
 
-export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload }: Props) {
+export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, onWorkflowChanged }: Props) {
   const [wf, setWf] = useState<WorkflowInstance | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [busyKey, setBusyKey] = useState<string>('');
+  const [template, setTemplate] = useState<WorkflowTemplate | null>(null);
+
+  const canExtendDeadlines = canCompleteSteps;
+  const [extendOpenFor, setExtendOpenFor] = useState<string>('');
+  const [extendDays, setExtendDays] = useState<string>('1');
+  const [extendReason, setExtendReason] = useState<string>('');
 
   const load = async () => {
     setLoading(true);
@@ -22,9 +41,20 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload }:
     try {
       const data = await getWorkflowForCase(caseId);
       setWf(data);
+      if (data?.templateId) {
+        try {
+          const t = await getWorkflowTemplateById(String(data.templateId));
+          setTemplate(t);
+        } catch {
+          setTemplate(null);
+        }
+      } else {
+        setTemplate(null);
+      }
     } catch (e: any) {
       setErr(e.message || 'Failed to load workflow');
       setWf(null);
+      setTemplate(null);
     } finally {
       setLoading(false);
     }
@@ -86,12 +116,45 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload }:
       setErr('');
       const updated = await completeWorkflowStep(caseId, stepKey);
       setWf(updated);
+      await onWorkflowChanged?.();
     } catch (e: any) {
       setErr(e.message || 'Failed to complete step');
     } finally {
       setBusyKey('');
     }
   };
+
+  const onExtendDeadline = async (stepKey: string) => {
+    if (!canExtendDeadlines) return;
+    const days = Number(extendDays);
+    if (!Number.isFinite(days) || days <= 0) {
+      setErr('Provide a valid number of days to extend.');
+      return;
+    }
+    try {
+      setBusyKey(`extend:${stepKey}`);
+      setErr('');
+      const updated = await extendWorkflowStepDeadline(caseId, stepKey, days, extendReason);
+      setWf(updated);
+      await onWorkflowChanged?.();
+      setExtendOpenFor('');
+      setExtendDays('1');
+      setExtendReason('');
+    } catch (e: any) {
+      setErr(e.message || 'Failed to extend deadline');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  const templatePill = !wf?.templateId ? null : (
+    <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700">
+      <span className="font-semibold">Workflow</span>
+      <span className="text-gray-700">{template?.matterType || template?.name || 'Template'}</span>
+      <span className="text-gray-400">•</span>
+      <span className="font-mono text-gray-500">{String(wf.templateId).slice(-8)}</span>
+    </div>
+  );
 
   if (loading) return <div className="py-8 text-gray-500">Loading workflow...</div>;
   if (err) return <div className="py-4 text-red-700 bg-red-50 border border-red-100 rounded px-4">{err}</div>;
@@ -111,6 +174,7 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload }:
             Current step: <span className="font-medium text-gray-900">{wf.currentStepKey || '—'}</span>
           </div>
         </div>
+        <div className="mt-3">{templatePill}</div>
       </div>
 
       {steps.map((s) => (
@@ -120,19 +184,105 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload }:
               <div className="text-xs text-gray-500">{s.stepKey}</div>
               <div className="font-semibold text-gray-900">{s.title}</div>
               <div className="text-sm text-gray-600">Status: {s.status}</div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${getUrgencyClass(
+                    getUrgencyColorFromRatio(getDueRemainingRatio(s.startAt, s.dueAt))
+                  )}`}
+                  title={s.dueAt ? `Due: ${new Date(s.dueAt).toLocaleString()}` : 'No due date'}
+                >
+                  {formatDueCountdown(s.dueAt)}
+                </span>
+                {s.dueAt ? (
+                  <span className="text-xs text-gray-500">Due {new Date(s.dueAt).toLocaleDateString()}</span>
+                ) : null}
+                {typeof s.feeAmount === 'number' ? (
+                  <span className="text-xs text-gray-700">Fee: {`${s.feeCurrency || 'RWF'} ${Math.round(s.feeAmount).toLocaleString()}`}</span>
+                ) : s.feeText ? (
+                  <span className="text-xs text-gray-700">Fee: {s.feeText}</span>
+                ) : null}
+                {s.slaMinutes ? (
+                  <span className="text-xs text-gray-500">Duration: {Math.round(s.slaMinutes / 60)}h</span>
+                ) : s.slaText ? (
+                  <span className="text-xs text-gray-500">Duration: {s.slaText}</span>
+                ) : null}
+              </div>
             </div>
 
-            {canCompleteSteps && (
-              <button
-                disabled={busyKey === `complete:${s.stepKey}` || s.status === 'Completed'}
-                onClick={() => onCompleteStep(s.stepKey)}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-60"
-              >
-                <CheckCircle className="w-4 h-4" />
-                Complete Step
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {canExtendDeadlines && s.status !== 'Completed' && (
+                <button
+                  type="button"
+                  onClick={() => setExtendOpenFor((k) => (k === s.stepKey ? '' : s.stepKey))}
+                  className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                  title="Extend deadline"
+                >
+                  <CalendarPlus className="w-4 h-4" />
+                  Extend
+                </button>
+              )}
+
+              {canCompleteSteps && (
+                <button
+                  disabled={busyKey === `complete:${s.stepKey}` || s.status === 'Completed'}
+                  onClick={() => onCompleteStep(s.stepKey)}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-60"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Complete Step
+                </button>
+              )}
+            </div>
           </div>
+
+          {extendOpenFor === s.stepKey && canExtendDeadlines ? (
+            <div className="px-5 py-4 border-b border-gray-200 bg-gray-50">
+              <div className="text-sm font-semibold text-gray-900">Extend deadline</div>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Add days</label>
+                  <input
+                    value={extendDays}
+                    onChange={(e) => setExtendDays(e.target.value)}
+                    type="number"
+                    min={1}
+                    max={365}
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Reason (optional)</label>
+                  <input
+                    value={extendReason}
+                    onChange={(e) => setExtendReason(e.target.value)}
+                    placeholder="e.g., Awaiting client documents"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+                  />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExtendOpenFor('');
+                    setExtendDays('1');
+                    setExtendReason('');
+                  }}
+                  className="px-3 py-2 border border-gray-300 rounded text-gray-700 hover:bg-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onExtendDeadline(s.stepKey)}
+                  disabled={busyKey === `extend:${s.stepKey}`}
+                  className="px-3 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-60"
+                >
+                  {busyKey === `extend:${s.stepKey}` ? 'Extending…' : 'Extend deadline'}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="p-5">
             <div className="text-sm font-medium text-gray-900 mb-3">Deliverables</div>

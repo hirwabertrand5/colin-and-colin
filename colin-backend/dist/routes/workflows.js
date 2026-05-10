@@ -22,5 +22,7 @@ router.post('/cases/:caseId/init', authMiddleware_1.authenticate, (0, authMiddle
 router.post('/cases/:caseId/steps/:stepKey/outputs/:outputKey/attach', authMiddleware_1.authenticate, workflowController_1.attachOutputDocument);
 // Step completion (admin only)
 router.post('/cases/:caseId/steps/:stepKey/complete', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ADMIN_ROLES), workflowController_1.completeStep);
+// Deadline extension (admin only)
+router.post('/cases/:caseId/steps/:stepKey/extend-deadline', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ADMIN_ROLES), workflowController_1.extendStepDeadline);
 exports.default = router;
 //# sourceMappingURL=workflows.js.map

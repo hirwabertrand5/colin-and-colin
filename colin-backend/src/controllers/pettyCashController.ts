@@ -127,6 +127,23 @@ export const listExpensesForFund = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const listExpensesForCase = async (req: AuthRequest, res: Response) => {
+  try {
+    const caseId = Array.isArray(req.params.caseId) ? req.params.caseId[0] : req.params.caseId;
+    if (!caseId) return res.status(400).json({ message: 'Missing caseId.' });
+    if (!mongoose.Types.ObjectId.isValid(String(caseId)))
+      return res.status(400).json({ message: 'Invalid caseId.' });
+
+    const expenses = await PettyCashExpense.find({ caseId: new mongoose.Types.ObjectId(String(caseId)) })
+      .sort({ date: -1, createdAt: -1 })
+      .limit(500);
+
+    res.json(expenses);
+  } catch {
+    res.status(500).json({ message: 'Failed to fetch case expenses.' });
+  }
+};
+
 export const createExpense = async (req: AuthRequest, res: Response) => {
   const session = await mongoose.startSession();
   try {

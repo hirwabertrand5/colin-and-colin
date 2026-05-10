@@ -311,12 +311,48 @@ export const completeStep = async (req: AuthRequest, res: Response) => {
     c.workflowProgress = {
       status: inst.status === 'Completed' ? 'Completed' : 'In Progress',
       currentStepKey: inst.currentStepKey,
+      currentStepTitle: (() => {
+        if (!inst.currentStepKey) return undefined;
+        const ref = (inst.steps || []).find((s: any) => s.stepKey === inst.currentStepKey);
+        return ref?.title;
+      })(),
+      currentStepStartAt: (() => {
+        if (!inst.currentStepKey) return undefined;
+        const ref = (inst.steps || []).find((s: any) => s.stepKey === inst.currentStepKey);
+        return ref?.startAt;
+      })(),
+      currentStepDueAt: (() => {
+        if (!inst.currentStepKey) return undefined;
+        const ref = (inst.steps || []).find((s: any) => s.stepKey === inst.currentStepKey);
+        return ref?.dueAt;
+      })(),
       percent,
       nextDueAt,
       plannedValue: { amount: plannedAmount || undefined, currency },
       completedValue: { amount: completedAmount || undefined, currency },
     };
     await c.save();
+
+    // Update billing buckets based on payment mode
+    const paymentMode = String((c as any).billingSettings?.paymentMode || 'postpaid');
+    if (paymentMode === 'prepaid') {
+      const remaining = Number((c as any).billingSettings?.prepaidRemaining) || 0;
+      const nextRemaining = Math.max(0, remaining - (typeof step.feeAmount === 'number' ? step.feeAmount : 0));
+      (c as any).billingSettings = {
+        ...(c as any).billingSettings,
+        prepaidRemaining: nextRemaining,
+      };
+      await c.save();
+    } else {
+      const accrued = Number((c as any).billingSettings?.accruedUnbilled) || 0;
+      const nextAccrued = accrued + (typeof step.feeAmount === 'number' ? step.feeAmount : 0);
+      (c as any).billingSettings = {
+        ...(c as any).billingSettings,
+        paymentMode: 'postpaid',
+        accruedUnbilled: nextAccrued,
+      };
+      await c.save();
+    }
 
     const actor = actorFromReq(req);
     await writeAudit({
@@ -331,5 +367,66 @@ export const completeStep = async (req: AuthRequest, res: Response) => {
     res.json(inst);
   } catch {
     res.status(500).json({ message: 'Failed to complete step.' });
+  }
+};
+
+// Extend a workflow step deadline (admin only)
+export const extendStepDeadline = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isAdmin(req.user?.role)) return res.status(403).json({ message: 'Forbidden.' });
+
+    const { caseId, stepKey } = req.params as any;
+    const { extendDays, reason } = req.body || {};
+
+    const days = Number(extendDays);
+    if (!Number.isFinite(days) || days <= 0 || days > 365) {
+      return res.status(400).json({ message: 'extendDays must be a number between 1 and 365.' });
+    }
+
+    const c: any = await Case.findById(caseId);
+    if (!c) return res.status(404).json({ message: 'Case not found.' });
+
+    const inst: any = await WorkflowInstance.findOne({ caseId: c._id });
+    if (!inst) return res.status(404).json({ message: 'Workflow instance not found.' });
+
+    const step = (inst.steps || []).find((s: any) => s.stepKey === stepKey);
+    if (!step) return res.status(404).json({ message: 'Step not found.' });
+    if (!step.dueAt) return res.status(400).json({ message: 'Step has no due date to extend.' });
+    if (step.status === 'Completed') return res.status(400).json({ message: 'Cannot extend a completed step.' });
+
+    const oldDue = new Date(step.dueAt);
+    const newDue = new Date(oldDue.getTime() + days * 24 * 60 * 60 * 1000);
+    step.dueAt = newDue;
+
+    await inst.save();
+
+    // Update case nextDueAt if this step is now the nearest pending
+    const nextDueAt = (() => {
+      const pending = (inst.steps || [])
+        .filter((s: any) => s.status !== 'Completed')
+        .slice()
+        .sort((a: any, b: any) => new Date(a.dueAt || 0).getTime() - new Date(b.dueAt || 0).getTime())[0];
+      return pending?.dueAt;
+    })();
+
+    c.workflowProgress = {
+      ...(c.workflowProgress || {}),
+      nextDueAt,
+    };
+    await c.save();
+
+    const actor = actorFromReq(req);
+    await writeAudit({
+      caseId: String(c._id),
+      actorName: actor.actorName,
+      ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
+      action: 'WORKFLOW_STEP_DEADLINE_EXTENDED',
+      message: 'Extended workflow step deadline',
+      detail: `${stepKey} • +${days}d${reason ? ` • ${String(reason).trim()}` : ''}`,
+    });
+
+    res.json(inst);
+  } catch (e: any) {
+    res.status(500).json({ message: e?.message || 'Failed to extend deadline.' });
   }
 };

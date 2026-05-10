@@ -261,7 +261,7 @@ export default function DashboardLayout({ user, onLogout, children }: DashboardL
           </div>
         </header>
 
-        <main className="main-content px-4 pb-4 lg:px-6 lg:pb-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
+        <main className="main-content px-4 lg:px-6 bg-gray-50 dark:bg-gray-900 min-h-screen" style={{ paddingBottom: '100px' }}>
           {children}
         </main>
       </div>

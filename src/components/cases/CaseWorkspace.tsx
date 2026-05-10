@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import CaseClientReportsTab from '../reports/CaseClientReportsTab';
 import CaseWorkflowTab from './CaseWorkflowTab';
@@ -52,8 +52,14 @@ import {
   deleteInvoice,
   Invoice,
 } from '../../services/invoiceService';
+import { listExpensesForCase, PettyCashExpense } from '../../services/pettyCashService';
 import { getWorkflowForCase, WorkflowInstance, completeWorkflowStep } from '../../services/workflowInstanceService';
-import { getWorkflowTemplateById, WorkflowTemplate } from '../../services/workflowService';
+import {
+  getWorkflowTemplateById,
+  listActiveWorkflowTemplates,
+  WorkflowTemplate,
+} from '../../services/workflowService';
+import { LEGAL_SERVICES_TREE, ServiceNode } from '../../constants/legalServicesTree';
 
 const API_URL = import.meta.env.VITE_API_URL;
 const BACKEND_URL = API_URL ? API_URL.replace(/\/api\/?$/, '') : '';
@@ -106,6 +112,8 @@ const getServicePathAccent = (caseType?: CaseData['caseType']) => {
   return 'bg-blue-50 text-blue-700 border-blue-200';
 };
 
+const SERVICE_LEVEL_LABELS = ['Legal Service', 'Category', 'Practice Area', 'Service Line', 'Sub-category', 'Detail'];
+
 const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -127,7 +135,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
 
   // Tabs
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'workflow' | 'tasks' | 'calendar' | 'documents' | 'billing' | 'audit' | 'reports'
+    'overview' | 'tasks' | 'calendar' | 'documents' | 'billing' | 'audit' | 'reports'
   >('overview');
 
   // Workflow instance (for overview checklist)
@@ -242,11 +250,19 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   // Edit case modal
   const [showEditCase, setShowEditCase] = useState(false);
   const [editCaseData, setEditCaseData] = useState<CaseData | null>(null);
+  const [editServicePath, setEditServicePath] = useState<string[]>([]);
+  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([]);
+  const [workflowTemplatesLoading, setWorkflowTemplatesLoading] = useState(false);
+  const [workflowTemplatesError, setWorkflowTemplatesError] = useState('');
+  const editModalInitializedRef = useRef(false);
 
   // Billing
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [invoicesError, setInvoicesError] = useState('');
+  const [caseExpenses, setCaseExpenses] = useState<PettyCashExpense[]>([]);
+  const [caseExpensesLoading, setCaseExpensesLoading] = useState(false);
+  const [caseExpensesError, setCaseExpensesError] = useState('');
 
   const [showAddInvoiceModal, setShowAddInvoiceModal] = useState(false);
   const [newInvoice, setNewInvoice] = useState({
@@ -308,6 +324,31 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
       .finally(() => setTemplateLoading(false));
   }, [caseData?.workflowTemplateId]);
 
+  // Edit modal bootstrapping: templates + decision-tree path
+  useEffect(() => {
+    if (!showEditCase) {
+      editModalInitializedRef.current = false;
+      return;
+    }
+
+    if (!editModalInitializedRef.current) {
+      editModalInitializedRef.current = true;
+
+      setWorkflowTemplatesLoading(true);
+      setWorkflowTemplatesError('');
+      listActiveWorkflowTemplates()
+        .then((data) => setWorkflowTemplates(Array.isArray(data) ? data : []))
+        .catch((e: any) => {
+          setWorkflowTemplates([]);
+          setWorkflowTemplatesError(e?.message || 'Failed to load workflow templates');
+        })
+        .finally(() => setWorkflowTemplatesLoading(false));
+
+      const ids = (editCaseData?.legalServicePath || []).map((x) => x.id).filter(Boolean);
+      setEditServicePath(ids);
+    }
+  }, [showEditCase, editCaseData, editModalInitializedRef]);
+
   const stageChecklistItems = useMemo(() => {
     if (!workflowInstance) return [];
     const stages = new Map<string, typeof workflowInstance.steps>();
@@ -322,6 +363,138 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
       return { stageKey, steps, allCompleted, completedCount };
     });
   }, [workflowInstance]);
+
+  // ----------------------------
+  // Edit Case: decision tree + template suggestion
+  // ----------------------------
+  const findServiceNode = (nodes: ServiceNode[], id: string) => nodes.find((node) => node.id === id);
+
+  const selectedEditServiceNodes = useMemo(() => {
+    const nodes: ServiceNode[] = [];
+    let currentNodes = LEGAL_SERVICES_TREE;
+
+    for (const id of editServicePath) {
+      const match = findServiceNode(currentNodes, id);
+      if (!match) break;
+      nodes.push(match);
+      currentNodes = match.children || [];
+    }
+
+    return nodes;
+  }, [editServicePath]);
+
+  const resolveCaseTypeFromSelection = (nodes: ServiceNode[]): CaseData['caseType'] | null => {
+    for (let i = nodes.length - 1; i >= 0; i -= 1) {
+      if ((nodes[i] as any).caseType) return (nodes[i] as any).caseType as CaseData['caseType'];
+    }
+    return null;
+  };
+
+  const resolveSuggestedMatterType = (nodes: ServiceNode[]): string | null => {
+    for (let i = nodes.length - 1; i >= 0; i -= 1) {
+      const suggested = (nodes[i] as any).suggestedMatterTypes?.[0];
+      if (suggested) return suggested;
+    }
+    return null;
+  };
+
+  const editServiceLevels = useMemo(() => {
+    const levels: Array<{
+      label: string;
+      options: ServiceNode[];
+      value: string;
+      placeholder: string;
+    }> = [];
+
+    let currentOptions = LEGAL_SERVICES_TREE;
+    let depth = 0;
+
+    while (currentOptions.length > 0) {
+      levels.push({
+        label: SERVICE_LEVEL_LABELS[depth] || `Level ${depth + 1}`,
+        options: currentOptions,
+        value: editServicePath[depth] || '',
+        placeholder: depth === 0 ? 'Select...' : `Select ${SERVICE_LEVEL_LABELS[depth - 1].toLowerCase()} first`,
+      });
+
+      const selectedNode = editServicePath[depth] ? findServiceNode(currentOptions, editServicePath[depth]) : undefined;
+      if (!selectedNode?.children?.length) break;
+
+      currentOptions = selectedNode.children;
+      depth += 1;
+    }
+
+    return levels;
+  }, [editServicePath]);
+
+  const updateEditServicePathAtLevel = (levelIndex: number, value: string) => {
+    setEditServicePath((prev) => {
+      const next = prev.slice(0, levelIndex);
+      if (value) next[levelIndex] = value;
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!showEditCase) return;
+    if (!editCaseData) return;
+
+    const ct = resolveCaseTypeFromSelection(selectedEditServiceNodes);
+    const suggested = resolveSuggestedMatterType(selectedEditServiceNodes);
+    const legalServicePath = selectedEditServiceNodes.map((node) => ({ id: node.id, label: node.label }));
+
+    setEditCaseData((prev) => {
+      if (!prev) return prev;
+
+      const prevIds = (prev.legalServicePath || []).map((x) => x.id);
+      const nextIds = legalServicePath.map((x) => x.id);
+      const samePath = prevIds.length === nextIds.length && prevIds.every((id, i) => id === nextIds[i]);
+
+      const nextCaseType = ct || prev.caseType;
+      const nextWorkflow = suggested || prev.workflow;
+
+      if (samePath && nextCaseType === prev.caseType && nextWorkflow === prev.workflow) return prev;
+
+      return {
+        ...prev,
+        ...(ct ? { caseType: ct } : {}),
+        ...(samePath ? {} : { legalServicePath }),
+        ...(suggested ? { workflow: suggested } : {}),
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEditServiceNodes, showEditCase]);
+
+  useEffect(() => {
+    if (!showEditCase) return;
+    if (!editCaseData) return;
+    if (workflowTemplatesLoading) return;
+
+    const suggested = resolveSuggestedMatterType(selectedEditServiceNodes);
+    const ct = resolveCaseTypeFromSelection(selectedEditServiceNodes);
+    if (!suggested || !ct) return;
+
+    // If current template doesn't match suggested, auto-pick best match
+    const currentTemplate = workflowTemplates.find((t) => t._id === editCaseData.workflowTemplateId);
+    const currentOk = currentTemplate && currentTemplate.matterType === suggested && currentTemplate.caseType === ct;
+    if (currentOk) return;
+
+    const match = workflowTemplates.find((t) => t.matterType === suggested && t.caseType === ct);
+    if (!match) return;
+
+    setEditCaseData((prev) => {
+      if (!prev) return prev;
+      if (prev.workflowTemplateId === match._id && prev.caseType === match.caseType && prev.workflow === match.matterType)
+        return prev;
+      return {
+        ...prev,
+        workflowTemplateId: match._id,
+        caseType: match.caseType,
+        workflow: match.matterType,
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEditServiceNodes, workflowTemplates, workflowTemplatesLoading, showEditCase]);
 
   // ----------------------------
   // Fetch staff list (only needed for MD/Exec actions)
@@ -647,9 +820,25 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
     }
   };
 
+  const reloadCaseExpenses = async () => {
+    if (!caseData?._id) return;
+    setCaseExpensesLoading(true);
+    setCaseExpensesError('');
+    try {
+      const data = await listExpensesForCase(caseData._id);
+      setCaseExpenses(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      setCaseExpensesError(err.message || 'Failed to fetch case expenses');
+      setCaseExpenses([]);
+    } finally {
+      setCaseExpensesLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'billing' && canManageBilling) {
       reloadInvoices();
+      reloadCaseExpenses();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseData?._id, activeTab]);
@@ -719,6 +908,12 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   );
   const outstanding = useMemo(() => Math.max(0, totalBilled - totalPaid), [totalBilled, totalPaid]);
 
+  const paymentMode = (caseData?.billingSettings?.paymentMode || 'postpaid') as 'prepaid' | 'postpaid';
+  const billingCurrency = caseData?.billingSettings?.currency || 'RWF';
+  const prepaidRemaining = Number(caseData?.billingSettings?.prepaidRemaining) || 0;
+  const prepaidTotal = Number(caseData?.billingSettings?.prepaidTotal) || 0;
+  const accruedUnbilled = Number(caseData?.billingSettings?.accruedUnbilled) || 0;
+
   const handleDeleteInvoice = async (invoiceId: string) => {
     if (!window.confirm('Are you sure you want to delete this invoice?')) return;
     if (!canManageBilling) return;
@@ -776,6 +971,14 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
       // Reload workflow
       const updatedWf = await getWorkflowForCase(id);
       setWorkflowInstance(updatedWf);
+
+      // Reload case to reflect workflowProgress + billing buckets updates
+      try {
+        const updatedCase = await getCaseById(id);
+        setCaseData(updatedCase);
+      } catch {
+        // ignore
+      }
       
       // Calculate stage-based billing value using template fees
       let completedValueAmount = 0;
@@ -913,11 +1116,10 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-3xl font-bold text-gray-900">{caseData.parties}</h1>
-              <span className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700 font-semibold">
-                {caseData.priority}
-              </span>
-              <span className="px-2 py-0.5 text-xs rounded bg-green-100 text-green-700 font-semibold">
-                {caseData.status}
+              <span className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700 font-semibold">
+                {caseData.workflowProgress?.status === 'Completed'
+                  ? 'Completed'
+                  : caseData.workflowProgress?.currentStepTitle || 'Workflow'}
               </span>
             </div>
             <p className="text-base text-gray-500">
@@ -960,7 +1162,6 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
         <nav className="flex space-x-6 overflow-x-auto">
           {[
             { id: 'overview', label: 'Overview', icon: FileText },
-            { id: 'workflow', label: 'Workflow', icon: FileText },
             { id: 'tasks', label: 'Tasks', icon: CheckSquare },
             { id: 'calendar', label: 'Calendar', icon: CalendarIcon },
             { id: 'documents', label: 'Documents', icon: Upload },
@@ -996,102 +1197,32 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
 
       {/* Overview */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Case Progress</h2>
-            <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-              <span>Overall Progress</span>
-              <span className="font-semibold text-gray-800">{progress}%</span>
-            </div>
-            <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-6">
-              <div className="h-full bg-gray-800 transition-all" style={{ width: `${progress}%` }} />
-            </div>
-            <div>
-              {STAGE_ORDER.map((stage, idx) => {
-                const s = getStageStatus(stage);
-                return (
-                  <div key={stage} className="flex items-center justify-between py-2">
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-500 font-mono">{idx + 1}</span>
-                      <span className="text-gray-900">{stage}</span>
-                    </div>
-                    <span className={getStageColor(s)}>{s}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Workflow Steps & Checklist</h2>
-            {workflowLoading ? (
-              <div className="text-sm text-gray-500">Loading workflow...</div>
-            ) : workflowError ? (
-              <div className="text-sm text-red-600">{workflowError}</div>
-            ) : !workflowInstance ? (
-              <div className="text-sm text-gray-500">No workflow configured for this case.</div>
+            <h2 className="font-semibold text-gray-900 mb-4">Workflow Checklist</h2>
+            {caseData?._id ? (
+              <CaseWorkflowTab
+                caseId={caseData._id}
+                canCompleteSteps={canManageCase}
+                canUpload={true}
+                onWorkflowChanged={async () => {
+                  if (!caseData._id) return;
+                  try {
+                    const updatedCase = await getCaseById(caseData._id);
+                    setCaseData(updatedCase);
+                  } catch {
+                    // ignore
+                  }
+                  try {
+                    const updatedWf = await getWorkflowForCase(caseData._id);
+                    setWorkflowInstance(updatedWf);
+                  } catch {
+                    // ignore
+                  }
+                }}
+              />
             ) : (
-              <div className="space-y-4">
-                {stageChecklistItems.map(({ stageKey, steps, allCompleted, completedCount }) => (
-                  <div key={stageKey} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900">{stageKey}</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {steps.length} step{steps.length !== 1 ? 's' : ''} • {completedCount} completed
-                        </div>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={allCompleted}
-                        disabled={allCompleted || workflowLoading}
-                        onChange={async (e) => {
-                          if (!e.target.checked || allCompleted) return;
-                          await handleCompleteStage(stageKey, steps);
-                        }}
-                        className="w-4 h-4 text-gray-800 border-gray-300 rounded focus:ring-gray-400 mt-1"
-                        title="Check to mark entire stage as complete"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2 mt-3">
-                      {steps.map((step) => (
-                        <div key={step.stepKey} className="flex items-center gap-2 text-sm">
-                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                            step.status === 'Completed' 
-                              ? 'bg-green-100 border-green-500' 
-                              : step.status === 'In Progress'
-                                ? 'bg-blue-100 border-blue-500'
-                                : 'bg-gray-100 border-gray-300'
-                          }`}>
-                            {step.status === 'Completed' && (
-                              <span className="text-green-600 font-bold text-xs">✓</span>
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-800">{step.title}</div>
-                            <div className="text-xs text-gray-500">
-                              {step.outputs.length > 0 ? `${step.outputs.length} deliverable${step.outputs.length !== 1 ? 's' : ''}` : 'No deliverables'}
-                              {step.outputs.some(o => o.required) && (
-                                <span className="ml-2 text-red-600">• Required</span>
-                              )}
-                            </div>
-                          </div>
-                          <span className={`text-xs px-2 py-1 rounded ${
-                            step.status === 'Completed'
-                              ? 'bg-green-100 text-green-700'
-                              : step.status === 'In Progress'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-gray-100 text-gray-700'
-                          }`}>
-                            {step.status}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <div className="text-sm text-gray-500">No workflow configured for this case.</div>
             )}
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-6 lg:col-span-2">
@@ -1153,10 +1284,6 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
             <p className="text-sm text-gray-600 whitespace-pre-line">{caseData.description}</p>
           </div>
         </div>
-      )}
-
-      {activeTab === 'workflow' && caseData?._id && (
-        <CaseWorkflowTab caseId={caseData._id} canCompleteSteps={canManageCase} canUpload={true} />
       )}
 
       {/* Tasks */}
@@ -2081,6 +2208,51 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
       {/* Billing */}
       {activeTab === 'billing' && (
         <div className="space-y-6">
+          {/* Workflow-driven billing mode */}
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Billing mode</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Set per-case. Workflow step fees automatically debit prepaid balances or accrue for postpaid clients when steps are completed.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                    paymentMode === 'prepaid' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  }`}
+                >
+                  {paymentMode === 'prepaid' ? 'Prepaid' : 'Postpaid'}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Prepaid total</div>
+                <div className="mt-2 text-lg font-semibold text-gray-900">
+                  {billingCurrency} {Math.round(prepaidTotal).toLocaleString()}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Prepaid remaining</div>
+                <div className="mt-2 text-lg font-semibold text-gray-900">
+                  {billingCurrency} {Math.round(prepaidRemaining).toLocaleString()}
+                </div>
+                <div className="mt-2 text-xs text-gray-500">Auto-updated on checklist completion.</div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Accrued (unbilled)</div>
+                <div className="mt-2 text-lg font-semibold text-gray-900">
+                  {billingCurrency} {Math.round(accruedUnbilled).toLocaleString()}
+                </div>
+                <div className="mt-2 text-xs text-gray-500">For postpaid clients only.</div>
+              </div>
+            </div>
+          </div>
+
           {/* Summary */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white border border-gray-200 rounded-xl p-6">
@@ -2224,6 +2396,54 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Petty cash (case-linked) */}
+          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+            <div className="px-6 py-5 border-b flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Petty Cash (Case Linked) <span className="text-gray-500 font-medium">({caseExpenses.length})</span>
+                </h3>
+                <p className="text-sm text-gray-500">Expenses recorded as case-related</p>
+              </div>
+            </div>
+
+            {caseExpensesError && (
+              <div className="px-6 py-3 text-sm text-red-700 bg-red-50 border-b">{caseExpensesError}</div>
+            )}
+
+            {caseExpensesLoading ? (
+              <div className="px-6 py-10 text-gray-500">Loading petty cash expenses...</div>
+            ) : caseExpenses.length === 0 ? (
+              <div className="px-6 py-10 text-gray-500">No petty cash expenses linked to this case.</div>
+            ) : (
+              <div className="divide-y">
+                {caseExpenses.map((exp, index) => (
+                  <div key={exp._id} className="px-6 py-5 flex items-center justify-between gap-4">
+                    <div className="flex items-start gap-4 min-w-0">
+                      <div className="w-7 text-sm text-gray-400 font-medium pt-0.5">{index + 1}.</div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900 truncate">{exp.title}</div>
+                        <div className="text-sm text-gray-500">
+                          Date: {exp.date}
+                          {exp.vendor ? ` • Vendor: ${exp.vendor}` : ''}
+                          {exp.category ? ` • Category: ${exp.category}` : ''}
+                        </div>
+                        {exp.note ? <div className="text-sm text-gray-500 mt-1">{exp.note}</div> : null}
+                        <div className="mt-2 text-xs text-gray-500">
+                          {exp.chargeType === 'client' ? 'Client-related' : 'Internal'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <div className="text-lg font-bold text-gray-900">{formatRwf(Number(exp.amount) || 0)}</div>
                     </div>
                   </div>
                 ))}
@@ -2438,6 +2658,33 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                   <option value="Litigation Cases">Litigation Cases</option>
                   <option value="Labor Cases">Labor Cases</option>
                 </select>
+                <p className="text-xs text-gray-500 mt-2">Auto-updates when you change the Legal Service classification.</p>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="text-sm font-semibold text-gray-900 mb-3">Legal Service Classification</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {editServiceLevels.map((level, index) => (
+                    <div key={`${level.label}-${index}`}>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{level.label}</label>
+                      <select
+                        value={level.value}
+                        onChange={(e) => updateEditServicePathAtLevel(index, e.target.value)}
+                        disabled={index > 0 && !editServicePath[index - 1]}
+                        className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 disabled:opacity-60"
+                      >
+                        <option value="">
+                          {index === 0 || editServicePath[index - 1] ? 'Select...' : level.placeholder}
+                        </option>
+                        {level.options.map((node) => (
+                          <option key={node.id} value={node.id}>
+                            {node.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -2460,32 +2707,13 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                 {staffError && <p className="text-xs text-red-600 mt-2">{staffError}</p>}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                <select
-                  value={editCaseData.priority}
-                  onChange={(e) => setEditCaseData((c) => (c ? { ...c, priority: e.target.value } : c))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                >
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Low">Low</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={editCaseData.status}
-                  onChange={(e) => setEditCaseData((c) => (c ? { ...c, status: e.target.value } : c))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                >
-                  {STAGE_ORDER.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="text-sm font-semibold text-gray-900">Workflow status</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {editCaseData.workflowProgress?.status === 'Completed'
+                    ? 'Completed'
+                    : editCaseData.workflowProgress?.currentStepTitle || 'In Progress'}
+                </div>
               </div>
 
               <div>
@@ -2496,6 +2724,149 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                   placeholder="1000000"
                 />
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">Workflow template</div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Changing the template or start date will re-initialize the workflow steps for this case.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Workflow Start Date</label>
+                    <input
+                      type="date"
+                      value={
+                        editCaseData.workflowStartDate
+                          ? new Date(editCaseData.workflowStartDate).toISOString().slice(0, 10)
+                          : ''
+                      }
+                      onChange={(e) =>
+                        setEditCaseData((c) =>
+                          c ? { ...c, workflowStartDate: e.target.value } : c
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Workflow Template</label>
+                    <select
+                      value={editCaseData.workflowTemplateId || ''}
+                      onChange={(e) => {
+                        const templateId = e.target.value;
+                        const t = workflowTemplates.find((x) => x._id === templateId);
+                        setEditCaseData((c) =>
+                          c
+                            ? {
+                                ...c,
+                                workflowTemplateId: templateId,
+                                ...(t ? { caseType: t.caseType, workflow: t.matterType } : {}),
+                              }
+                            : c
+                        );
+                      }}
+                      disabled={workflowTemplatesLoading}
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+                    >
+                      <option value="">
+                        {workflowTemplatesLoading ? 'Loading templates...' : 'Select workflow template'}
+                      </option>
+                      {workflowTemplates.map((t) => (
+                        <option key={t._id} value={t._id}>
+                          {t.matterType}
+                        </option>
+                      ))}
+                    </select>
+                    {workflowTemplatesError ? (
+                      <p className="text-xs text-red-600 mt-2">{workflowTemplatesError}</p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="text-sm font-semibold text-gray-900">Billing settings</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment mode</label>
+                    <select
+                      value={editCaseData.billingSettings?.paymentMode || 'postpaid'}
+                      onChange={(e) => {
+                        const paymentMode = e.target.value === 'prepaid' ? 'prepaid' : 'postpaid';
+                        setEditCaseData((c) => {
+                          if (!c) return c;
+                          const currency = c.billingSettings?.currency || 'RWF';
+                          const prepaidTotal = Number(c.billingSettings?.prepaidTotal) || 0;
+                          return {
+                            ...c,
+                            billingSettings: {
+                              ...(c.billingSettings || {}),
+                              paymentMode,
+                              currency,
+                              prepaidTotal: paymentMode === 'prepaid' ? prepaidTotal : 0,
+                              prepaidRemaining: paymentMode === 'prepaid' ? prepaidTotal : 0,
+                              accruedUnbilled: 0,
+                            },
+                          };
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+                    >
+                      <option value="postpaid">Postpaid</option>
+                      <option value="prepaid">Prepaid</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                    <input
+                      value={editCaseData.billingSettings?.currency || 'RWF'}
+                      onChange={(e) =>
+                        setEditCaseData((c) =>
+                          c
+                            ? {
+                                ...c,
+                                billingSettings: { ...(c.billingSettings || {}), currency: e.target.value.toUpperCase() },
+                              }
+                            : c
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+                      placeholder="RWF"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Prepaid amount</label>
+                    <input
+                      value={String(editCaseData.billingSettings?.prepaidTotal ?? '')}
+                      onChange={(e) => {
+                        const value = Number(String(e.target.value).replace(/[^\d.]/g, ''));
+                        setEditCaseData((c) => {
+                          if (!c) return c;
+                          const paymentMode = c.billingSettings?.paymentMode || 'postpaid';
+                          const prepaidTotal = Number.isFinite(value) && value > 0 ? value : 0;
+                          return {
+                            ...c,
+                            billingSettings: {
+                              ...(c.billingSettings || {}),
+                              prepaidTotal,
+                              prepaidRemaining: paymentMode === 'prepaid' ? prepaidTotal : 0,
+                            },
+                          };
+                        });
+                      }}
+                      disabled={(editCaseData.billingSettings?.paymentMode || 'postpaid') !== 'prepaid'}
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white disabled:opacity-60"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>

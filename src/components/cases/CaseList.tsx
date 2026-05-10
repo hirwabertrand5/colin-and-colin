@@ -4,6 +4,7 @@ import { Plus, Search, Briefcase, ArrowUpDown } from 'lucide-react';
 import { UserRole } from '../../App';
 import { getAllCases, CaseData } from '../../services/caseService';
 import usePageTitle from '../../hooks/usePageTitle';
+import { getDueRemainingRatio, getUrgencyClass, getUrgencyColorFromRatio, formatDueCountdown } from '../../utils/workflowDeadline';
 
 interface CaseListProps {
   userRole: UserRole;
@@ -12,7 +13,7 @@ interface CaseListProps {
 const isAssociateLike = (role: UserRole) =>
   role === 'associate' || role === 'junior_associate' || role === 'lawyer' || role === 'intern';
 
-type SortKey = 'nextDueAt' | 'createdAt' | 'priority' | 'status' | 'caseNo' | 'parties';
+type SortKey = 'createdAt' | 'caseNo' | 'parties' | 'workflow' | 'currentStep';
 type SortDir = 'asc' | 'desc';
 
 export default function CaseList({ userRole }: CaseListProps) {
@@ -21,8 +22,7 @@ export default function CaseList({ userRole }: CaseListProps) {
   usePageTitle('Cases');
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [sortKey, setSortKey] = useState<SortKey>('nextDueAt');
+  const [sortKey, setSortKey] = useState<SortKey>('createdAt');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [cases, setCases] = useState<CaseData[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -52,87 +52,14 @@ export default function CaseList({ userRole }: CaseListProps) {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'High':
-        return 'bg-red-100 text-red-600';
-      case 'Medium':
-        return 'bg-yellow-100 text-yellow-700';
-      case 'Low':
-        return 'bg-green-100 text-green-700';
-      default:
-        return 'bg-gray-100 text-gray-700';
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'On Boarding':
-        return 'bg-gray-100 text-gray-700';
-      case 'Submission':
-      case 'Under Submission':
-        return 'bg-orange-100 text-orange-700';
-      case 'Pre trial':
-        return 'bg-indigo-100 text-indigo-600';
-      case 'Mediation':
-        return 'bg-yellow-100 text-yellow-700';
-      case 'Hearing':
-        return 'bg-blue-100 text-blue-600';
-      case 'Appeal':
-        return 'bg-purple-100 text-purple-600';
-      case 'Pronouncement':
-        return 'bg-pink-100 text-pink-600';
-      case 'Cope of Judgement':
-        return 'bg-orange-100 text-orange-600';
-      case 'Execution':
-        return 'bg-green-100 text-green-600';
-      default:
-        return 'bg-gray-100 text-gray-700';
-    }
-  };
-
-  const getDuePillStyle = (nextDueAt?: string) => {
-    if (!nextDueAt) return 'bg-gray-100 text-gray-700';
-    const due = new Date(nextDueAt);
-    const hours = (due.getTime() - new Date().getTime()) / (1000 * 60 * 60);
-    if (hours <= 48) return 'bg-red-100 text-red-700';
-    if (hours <= 120) return 'bg-orange-100 text-orange-700';
-    return 'bg-green-100 text-green-700';
-  };
-
-  const formatDueLabel = (nextDueAt?: string) => {
-    if (!nextDueAt) return 'No deadline';
-    const due = new Date(nextDueAt);
-    const days = Math.ceil((due.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-    if (days < 0) return `${Math.abs(days)}d overdue`;
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Tomorrow';
-    return `${days}d`;
+  const getDeadlinePillClass = (c: CaseData) => {
+    const ratio = getDueRemainingRatio(c.workflowProgress?.currentStepStartAt, c.workflowProgress?.currentStepDueAt);
+    return getUrgencyClass(getUrgencyColorFromRatio(ratio));
   };
 
   const collator = useMemo(() => new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }), []);
 
   const indexedCases = useMemo(() => {
-    const priorityRank = (priority: string | undefined) => {
-      if (priority === 'High') return 3;
-      if (priority === 'Medium') return 2;
-      if (priority === 'Low') return 1;
-      return 0;
-    };
-
-    const STATUS_ORDER: Record<string, number> = {
-      'On Boarding': 1,
-      Submission: 2,
-      'Under Submission': 3,
-      'Pre trial': 4,
-      Mediation: 5,
-      Hearing: 6,
-      Appeal: 7,
-      Pronouncement: 8,
-      'Cope of Judgement': 9,
-      Execution: 10,
-    };
-
     const toMs = (value: string | undefined) => {
       if (!value) return 0;
       const ms = Date.parse(value);
@@ -144,9 +71,8 @@ export default function CaseList({ userRole }: CaseListProps) {
       originalIndex,
       searchable: `${c.caseNo ?? ''} ${c.parties ?? ''}`.toLowerCase(),
       createdAtMs: toMs(c.createdAt),
-      nextDueAtMs: toMs(c.workflowProgress?.nextDueAt),
-      priorityRank: priorityRank(c.priority),
-      statusRank: STATUS_ORDER[c.status ?? ''] ?? 0,
+      workflowLabel: String(c.workflow ?? c.matterType ?? '').toLowerCase(),
+      currentStepLabel: String(c.workflowProgress?.currentStepTitle || '').toLowerCase(),
     }));
   }, [cases]);
 
@@ -157,32 +83,26 @@ export default function CaseList({ userRole }: CaseListProps) {
     if (q) {
       list = list.filter((x) => x.searchable.includes(q));
     }
-    if (filterStatus !== 'all') {
-      list = list.filter((x) => x.c.status === filterStatus);
-    }
 
     const dir = sortDir === 'asc' ? 1 : -1;
     const sorted = list.slice().sort((a, b) => {
       let cmp = 0;
 
       switch (sortKey) {
-        case 'nextDueAt':
-          cmp = a.nextDueAtMs - b.nextDueAtMs;
-          break;
         case 'createdAt':
           cmp = a.createdAtMs - b.createdAtMs;
-          break;
-        case 'priority':
-          cmp = a.priorityRank - b.priorityRank;
-          break;
-        case 'status':
-          cmp = a.statusRank - b.statusRank;
           break;
         case 'caseNo':
           cmp = collator.compare(a.c.caseNo ?? '', b.c.caseNo ?? '');
           break;
         case 'parties':
           cmp = collator.compare(a.c.parties ?? '', b.c.parties ?? '');
+          break;
+        case 'workflow':
+          cmp = collator.compare(a.workflowLabel, b.workflowLabel);
+          break;
+        case 'currentStep':
+          cmp = collator.compare(a.currentStepLabel, b.currentStepLabel);
           break;
         default:
           cmp = 0;
@@ -193,7 +113,7 @@ export default function CaseList({ userRole }: CaseListProps) {
     });
 
     return sorted.map((x) => x.c);
-  }, [collator, deferredSearchTerm, filterStatus, indexedCases, sortDir, sortKey]);
+  }, [collator, deferredSearchTerm, indexedCases, sortDir, sortKey]);
 
   const totalPages = Math.max(1, Math.ceil(filteredSortedCases.length / CASES_PER_PAGE));
   const paginatedCases = filteredSortedCases.slice(
@@ -203,7 +123,7 @@ export default function CaseList({ userRole }: CaseListProps) {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterStatus, sortKey, sortDir]);
+  }, [searchTerm, sortKey, sortDir]);
 
   useEffect(() => {
     setCurrentPage((prev) => Math.min(prev, totalPages));
@@ -247,38 +167,19 @@ export default function CaseList({ userRole }: CaseListProps) {
             />
           </div>
 
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-400 focus:outline-none"
-          >
-            <option value="all">All Status</option>
-            <option value="On Boarding">On Boarding</option>
-            <option value="Submission">Submission</option>
-            <option value="Under Submission">Under Submission</option>
-            <option value="Pre trial">Pre trial</option>
-            <option value="Mediation">Mediation</option>
-            <option value="Hearing">Hearing</option>
-            <option value="Appeal">Appeal</option>
-            <option value="Pronouncement">Pronouncement</option>
-            <option value="Cope of Judgement">Cope of Judgement</option>
-            <option value="Execution">Execution</option>
-          </select>
-
           <div className="flex gap-2">
             <select
               value={sortKey}
               onChange={(e) => {
                 const nextKey = e.target.value as SortKey;
                 setSortKey(nextKey);
-                setSortDir(nextKey === 'createdAt' || nextKey === 'priority' || nextKey === 'nextDueAt' ? 'asc' : 'asc');
+                // Keep sort direction stable; default is `desc`.
               }}
               className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-400 focus:outline-none"
             >
-              <option value="nextDueAt">Sort: Next Deadline</option>
               <option value="createdAt">Sort: Date Created</option>
-              <option value="priority">Sort: Priority</option>
-              <option value="status">Sort: Status</option>
+              <option value="workflow">Sort: Workflow</option>
+              <option value="currentStep">Sort: Current Step</option>
               <option value="caseNo">Sort: Case No.</option>
               <option value="parties">Sort: Parties</option>
             </select>
@@ -315,11 +216,12 @@ export default function CaseList({ userRole }: CaseListProps) {
                   'Case No.',
                   'Parties',
                   'Case Type',
-                  'Status',
-                  'Priority',
+                  'Workflow',
+                  'Current Step',
                   'Assigned To',
                   'Date Created',
                   'Billing Value',
+                  'Fees Cleared',
                   'Next Deadline',
                   'Actions',
                 ].map((header) => (
@@ -342,17 +244,12 @@ export default function CaseList({ userRole }: CaseListProps) {
                   <td className="px-6 py-5 text-sm font-medium text-gray-900">{item.caseNo}</td>
                   <td className="px-6 py-5 text-sm text-gray-900">{item.parties}</td>
                   <td className="px-6 py-5 text-sm text-gray-600">{item.caseType}</td>
+                  <td className="px-6 py-5 text-sm text-gray-700">{item.workflow || item.matterType || '—'}</td>
 
-                  <td className="px-6 py-5">
-                    <span className={`px-3 py-1 text-xs font-medium rounded-md ${getStatusColor(item.status || '')}`}>
-                      {item.status}
-                    </span>
-                  </td>
-
-                  <td className="px-6 py-5">
-                    <span className={`px-3 py-1 text-xs font-medium rounded-md ${getPriorityColor(item.priority || '')}`}>
-                      {item.priority}
-                    </span>
+                  <td className="px-6 py-5 text-sm text-gray-700">
+                    {item.workflowProgress?.status === 'Completed'
+                      ? 'Completed'
+                      : item.workflowProgress?.currentStepTitle || '—'}
                   </td>
 
                   <td className="px-6 py-5 text-sm text-gray-600">{item.assignedTo}</td>
@@ -366,27 +263,16 @@ export default function CaseList({ userRole }: CaseListProps) {
                   </td>
 
                   <td className="px-6 py-5 text-sm text-gray-500">
+                    {item.workflowProgress?.completedValue?.amount
+                      ? `${item.workflowProgress.completedValue.currency || 'RWF'} ${item.workflowProgress.completedValue.amount.toLocaleString()}`
+                      : '—'}
+                  </td>
+
+                  <td className="px-6 py-5 text-sm text-gray-500">
                     {item.workflowProgress?.nextDueAt ? new Date(item.workflowProgress.nextDueAt).toLocaleDateString() : '—'}
                     {item.workflowProgress?.nextDueAt ? (
-                      <div
-                        className={`mt-1 inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${
-                          (() => {
-                            const due = new Date(item.workflowProgress?.nextDueAt || '');
-                            const hours = (due.getTime() - new Date().getTime()) / (1000 * 60 * 60);
-                            if (hours <= 48) return 'bg-red-100 text-red-700';
-                            if (hours <= 120) return 'bg-orange-100 text-orange-700';
-                            return 'bg-green-100 text-green-700';
-                          })()
-                        }`}
-                      >
-                        {(() => {
-                          const due = new Date(item.workflowProgress?.nextDueAt || '');
-                          const days = Math.ceil((due.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                          if (days < 0) return `${Math.abs(days)}d overdue`;
-                          if (days === 0) return 'Today';
-                          if (days === 1) return 'Tomorrow';
-                          return `${days}d`;
-                        })()}
+                      <div className={`mt-1 inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold ${getDeadlinePillClass(item)}`}>
+                        {formatDueCountdown(item.workflowProgress?.nextDueAt)}
                       </div>
                     ) : null}
                   </td>

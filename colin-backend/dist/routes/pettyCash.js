@@ -16,6 +16,7 @@ router.post('/funds', authMiddleware_1.authenticate, (0, authMiddleware_1.author
 router.post('/funds/close', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ROLES), pettyCashController_1.closeActiveFund);
 // Expenses
 router.get('/funds/:fundId/expenses', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ROLES), pettyCashController_1.listExpensesForFund);
+router.get('/cases/:caseId/expenses', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ROLES), pettyCashController_1.listExpensesForCase);
 // Optional receipt upload: multipart/form-data with "files" (multiple)
 router.post('/funds/:fundId/expenses', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ROLES), documentController_1.upload.array('files'), pettyCashController_1.createExpense);
 router.delete('/expenses/:expenseId', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ROLES), pettyCashController_1.deleteExpense);

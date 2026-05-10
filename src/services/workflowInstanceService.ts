@@ -13,8 +13,18 @@ export type WorkflowInstance = {
     stageKey: string;
     order: number;
     status: 'Not Started' | 'In Progress' | 'Completed';
+    startAt?: string;
     dueAt?: string;
     completedAt?: string;
+
+    feeAmount?: number;
+    feeCurrency?: string;
+    feeText?: string;
+
+    slaMinutes?: number;
+    slaText?: string;
+
+    responsibleRole?: string;
     outputs: Array<{
       key: string;
       name: string;
@@ -40,5 +50,23 @@ export const completeWorkflowStep = async (caseId: string, stepKey: string): Pro
     headers: { Authorization: `Bearer ${getToken()}` },
   });
   if (!res.ok) throw new Error((await res.json()).message || 'Failed to complete step');
+  return res.json();
+};
+
+export const extendWorkflowStepDeadline = async (
+  caseId: string,
+  stepKey: string,
+  extendDays: number,
+  reason?: string
+): Promise<WorkflowInstance> => {
+  const res = await fetch(`${API_URL}/workflows/cases/${caseId}/steps/${stepKey}/extend-deadline`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify({ extendDays, reason }),
+  });
+  if (!res.ok) throw new Error((await res.json()).message || 'Failed to extend deadline');
   return res.json();
 };

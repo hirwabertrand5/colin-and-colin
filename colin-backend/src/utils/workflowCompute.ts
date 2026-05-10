@@ -28,18 +28,26 @@ export const feeToMoney = (fee: IFeeSpec | undefined): WorkflowMoney => {
   if (!fee) return {};
 
   if (fee.type === 'fixed' && typeof fee.min === 'number') {
-    return { amount: fee.min, currency: normalizeCurrency(fee.currency), text: fee.text };
+    const currency = normalizeCurrency(fee.currency);
+    return { amount: fee.min, ...(currency ? { currency } : {}), ...(fee.text ? { text: fee.text } : {}) };
   }
   if (fee.type === 'range' && typeof fee.min === 'number') {
-    return { amount: fee.min, currency: normalizeCurrency(fee.currency), text: fee.text };
+    const currency = normalizeCurrency(fee.currency);
+    return { amount: fee.min, ...(currency ? { currency } : {}), ...(fee.text ? { text: fee.text } : {}) };
   }
   if (fee.type === 'percentage') return { text: fee.text || `${fee.percentage ?? ''}%` };
   if (fee.type === 'included') return { text: fee.text || 'Included' };
 
   if (fee.text) {
     const amount = parseFirstNumber(fee.text);
-    const currency = normalizeCurrency(fee.currency) || (fee.text.toLowerCase().includes('rwf') || fee.text.toLowerCase().includes('frw') ? 'RWF' : undefined);
-    return { amount, currency, text: fee.text };
+    const currency =
+      normalizeCurrency(fee.currency) ||
+      (fee.text.toLowerCase().includes('rwf') || fee.text.toLowerCase().includes('frw') ? 'RWF' : undefined);
+    return {
+      ...(typeof amount === 'number' ? { amount } : {}),
+      ...(currency ? { currency } : {}),
+      text: fee.text,
+    };
   }
 
   return {};
@@ -66,12 +74,18 @@ export const slaToMinutes = (sla: ISlaSpec | undefined): { minutes?: number; tex
   if (typeof sla.max === 'number' && sla.unit) {
     const unit = String(sla.unit);
     const mult = UNIT_TO_MINUTES[unit] || (unit === 'hours' ? 60 : unit === 'days' ? 60 * 24 : unit === 'weeks' ? 60 * 24 * 7 : undefined);
-    if (mult) return { minutes: Math.max(0, Math.round(sla.max * mult)), text: sla.text };
+    if (mult) {
+      const minutes = Math.max(0, Math.round(sla.max * mult));
+      return { minutes, ...(sla.text ? { text: sla.text } : {}) };
+    }
   }
   if (typeof sla.min === 'number' && sla.unit) {
     const unit = String(sla.unit);
     const mult = UNIT_TO_MINUTES[unit] || (unit === 'hours' ? 60 : unit === 'days' ? 60 * 24 : unit === 'weeks' ? 60 * 24 * 7 : undefined);
-    if (mult) return { minutes: Math.max(0, Math.round(sla.min * mult)), text: sla.text };
+    if (mult) {
+      const minutes = Math.max(0, Math.round(sla.min * mult));
+      return { minutes, ...(sla.text ? { text: sla.text } : {}) };
+    }
   }
 
   const text = (sla.text || '').trim();
@@ -96,7 +110,7 @@ export const slaToMinutes = (sla: ISlaSpec | undefined): { minutes?: number; tex
   let m: RegExpExecArray | null;
   while ((m = re.exec(tokens))) {
     const n = Number(m[1]);
-    const unit = m[3];
+    const unit = String(m[3] || '');
     const mult = UNIT_TO_MINUTES[unit];
     if (Number.isFinite(n) && mult) {
       total += n * mult;
@@ -153,4 +167,3 @@ export const buildInstanceSteps = (template: IWorkflowTemplate | any, startDate:
     };
   });
 };
-
