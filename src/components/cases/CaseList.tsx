@@ -13,7 +13,7 @@ interface CaseListProps {
 const isAssociateLike = (role: UserRole) =>
   role === 'associate' || role === 'junior_associate' || role === 'lawyer' || role === 'intern';
 
-type SortKey = 'createdAt' | 'caseNo' | 'parties' | 'workflow' | 'currentStep';
+type SortKey = 'nextDeadline' | 'createdAt' | 'caseNo' | 'parties' | 'workflow' | 'currentStep';
 type SortDir = 'asc' | 'desc';
 
 export default function CaseList({ userRole }: CaseListProps) {
@@ -22,8 +22,8 @@ export default function CaseList({ userRole }: CaseListProps) {
   usePageTitle('Cases');
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('createdAt');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortKey, setSortKey] = useState<SortKey>('nextDeadline');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [cases, setCases] = useState<CaseData[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -66,6 +66,22 @@ export default function CaseList({ userRole }: CaseListProps) {
       return Number.isFinite(ms) ? ms : 0;
     };
 
+    const urgencyRank = (c: CaseData) => {
+      const ratio = getDueRemainingRatio(c.workflowProgress?.currentStepStartAt, c.workflowProgress?.currentStepDueAt);
+      const color = getUrgencyColorFromRatio(ratio);
+      if (color === 'red') return 0;
+      if (color === 'orange') return 1;
+      if (color === 'green') return 2;
+      return 3;
+    };
+
+    const nextDueAtMs = (c: CaseData) => {
+      const raw = c.workflowProgress?.nextDueAt || c.workflowProgress?.currentStepDueAt;
+      if (!raw) return Number.MAX_SAFE_INTEGER;
+      const ms = Date.parse(String(raw));
+      return Number.isFinite(ms) ? ms : Number.MAX_SAFE_INTEGER;
+    };
+
     return cases.map((c, originalIndex) => ({
       c,
       originalIndex,
@@ -73,6 +89,8 @@ export default function CaseList({ userRole }: CaseListProps) {
       createdAtMs: toMs(c.createdAt),
       workflowLabel: String(c.workflow ?? c.matterType ?? '').toLowerCase(),
       currentStepLabel: String(c.workflowProgress?.currentStepTitle || '').toLowerCase(),
+      deadlineRank: urgencyRank(c),
+      nextDueAtMs: nextDueAtMs(c),
     }));
   }, [cases]);
 
@@ -92,6 +110,12 @@ export default function CaseList({ userRole }: CaseListProps) {
         case 'createdAt':
           cmp = a.createdAtMs - b.createdAtMs;
           break;
+        case 'nextDeadline': {
+          // Red first (most urgent), then earlier due dates
+          cmp = a.deadlineRank - b.deadlineRank;
+          if (cmp === 0) cmp = a.nextDueAtMs - b.nextDueAtMs;
+          break;
+        }
         case 'caseNo':
           cmp = collator.compare(a.c.caseNo ?? '', b.c.caseNo ?? '');
           break;
@@ -173,10 +197,11 @@ export default function CaseList({ userRole }: CaseListProps) {
               onChange={(e) => {
                 const nextKey = e.target.value as SortKey;
                 setSortKey(nextKey);
-                // Keep sort direction stable; default is `desc`.
+                if (nextKey === 'nextDeadline') setSortDir('asc');
               }}
               className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-400 focus:outline-none"
             >
+              <option value="nextDeadline">Sort: Next Deadline (Urgent)</option>
               <option value="createdAt">Sort: Date Created</option>
               <option value="workflow">Sort: Workflow</option>
               <option value="currentStep">Sort: Current Step</option>
@@ -259,11 +284,13 @@ export default function CaseList({ userRole }: CaseListProps) {
                   </td>
 
                   <td className="px-6 py-5 text-sm text-gray-500">
-                    {item.workflowProgress?.plannedValue?.amount ? `${item.workflowProgress.plannedValue.currency || 'RWF'} ${item.workflowProgress.plannedValue.amount.toLocaleString()}` : '—'}
+                    {typeof item.workflowProgress?.plannedValue?.amount === 'number'
+                      ? `${item.workflowProgress.plannedValue.currency || 'RWF'} ${item.workflowProgress.plannedValue.amount.toLocaleString()}`
+                      : '—'}
                   </td>
 
                   <td className="px-6 py-5 text-sm text-gray-500">
-                    {item.workflowProgress?.completedValue?.amount
+                    {typeof item.workflowProgress?.completedValue?.amount === 'number'
                       ? `${item.workflowProgress.completedValue.currency || 'RWF'} ${item.workflowProgress.completedValue.amount.toLocaleString()}`
                       : '—'}
                   </td>

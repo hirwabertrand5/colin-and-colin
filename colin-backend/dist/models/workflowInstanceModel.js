@@ -51,9 +51,23 @@ const InstanceStepSchema = new mongoose_1.Schema({
     startAt: { type: Date },
     dueAt: { type: Date },
     completedAt: { type: Date },
+    actions: {
+        type: [
+            new mongoose_1.Schema({
+                text: { type: String, required: true },
+                done: { type: Boolean, default: false },
+                doneAt: { type: Date },
+            }, { _id: false }),
+        ],
+        default: [],
+    },
     feeAmount: { type: Number, min: 0 },
     feeCurrency: { type: String, trim: true },
     feeText: { type: String },
+    feeRangeMin: { type: Number, min: 0 },
+    feeRangeMax: { type: Number, min: 0 },
+    feeInputRequired: { type: Boolean, default: false },
+    feeSetByUser: { type: Boolean, default: false },
     slaMinutes: { type: Number, min: 0 },
     slaText: { type: String },
     responsibleRole: { type: String, trim: true },

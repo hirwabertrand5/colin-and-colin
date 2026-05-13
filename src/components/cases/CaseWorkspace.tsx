@@ -2214,7 +2214,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Billing mode</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  Set per-case. Workflow step fees automatically debit prepaid balances or accrue for postpaid clients when steps are completed.
+                  Set per-case. Workflow step fees automatically debit prepaid balances or accrue for pay-after-recovery clients when steps are completed.
                 </p>
               </div>
 
@@ -2224,7 +2224,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                     paymentMode === 'prepaid' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                   }`}
                 >
-                  {paymentMode === 'prepaid' ? 'Prepaid' : 'Postpaid'}
+                  {paymentMode === 'prepaid' ? 'Prepaid' : 'Pay after recovery'}
                 </span>
               </div>
             </div>
@@ -2248,7 +2248,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                 <div className="mt-2 text-lg font-semibold text-gray-900">
                   {billingCurrency} {Math.round(accruedUnbilled).toLocaleString()}
                 </div>
-                <div className="mt-2 text-xs text-gray-500">For postpaid clients only.</div>
+                <div className="mt-2 text-xs text-gray-500">For pay-after-recovery clients only.</div>
               </div>
             </div>
           </div>
@@ -2815,9 +2815,9 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                           };
                         });
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
                     >
-                      <option value="postpaid">Postpaid</option>
+                      <option value="postpaid">Pay after recovery</option>
                       <option value="prepaid">Prepaid</option>
                     </select>
                   </div>

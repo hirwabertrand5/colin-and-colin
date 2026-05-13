@@ -22,7 +22,13 @@ router.post('/cases/:caseId/init', authMiddleware_1.authenticate, (0, authMiddle
 router.post('/cases/:caseId/steps/:stepKey/outputs/:outputKey/attach', authMiddleware_1.authenticate, workflowController_1.attachOutputDocument);
 // Step completion (admin only)
 router.post('/cases/:caseId/steps/:stepKey/complete', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ADMIN_ROLES), workflowController_1.completeStep);
+// Step reopening (admin only)
+router.post('/cases/:caseId/steps/:stepKey/reopen', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ADMIN_ROLES), workflowController_1.reopenStep);
 // Deadline extension (admin only)
 router.post('/cases/:caseId/steps/:stepKey/extend-deadline', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ADMIN_ROLES), workflowController_1.extendStepDeadline);
+// Key actions (admin only)
+router.patch('/cases/:caseId/steps/:stepKey/actions/:index/toggle', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ADMIN_ROLES), workflowController_1.toggleStepAction);
+// Fee overrides (admin only)
+router.put('/cases/:caseId/steps/:stepKey/fee', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ADMIN_ROLES), workflowController_1.setStepFeeAmount);
 exports.default = router;
 //# sourceMappingURL=workflows.js.map

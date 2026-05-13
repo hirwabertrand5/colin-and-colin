@@ -23,9 +23,19 @@ export interface IInstanceStep {
   dueAt?: Date;
   completedAt?: Date;
 
+  actions: Array<{
+    text: string;
+    done: boolean;
+    doneAt?: Date;
+  }>;
+
   feeAmount?: number;
   feeCurrency?: string;
   feeText?: string;
+  feeRangeMin?: number;
+  feeRangeMax?: number;
+  feeInputRequired?: boolean;
+  feeSetByUser?: boolean;
 
   slaMinutes?: number;
   slaText?: string;
@@ -73,9 +83,27 @@ const InstanceStepSchema = new Schema<IInstanceStep>(
     dueAt: { type: Date },
     completedAt: { type: Date },
 
+    actions: {
+      type: [
+        new Schema(
+          {
+            text: { type: String, required: true },
+            done: { type: Boolean, default: false },
+            doneAt: { type: Date },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+
     feeAmount: { type: Number, min: 0 },
     feeCurrency: { type: String, trim: true },
     feeText: { type: String },
+    feeRangeMin: { type: Number, min: 0 },
+    feeRangeMax: { type: Number, min: 0 },
+    feeInputRequired: { type: Boolean, default: false },
+    feeSetByUser: { type: Boolean, default: false },
 
     slaMinutes: { type: Number, min: 0 },
     slaText: { type: String },

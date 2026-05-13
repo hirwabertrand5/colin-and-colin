@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.extendStepDeadline = exports.completeStep = exports.attachOutputDocument = exports.initWorkflowForCase = exports.getWorkflowForCase = exports.deleteTemplate = exports.updateTemplate = exports.createTemplate = exports.getTemplateById = exports.listAllTemplates = exports.listActiveTemplates = void 0;
+exports.setStepFeeAmount = exports.toggleStepAction = exports.extendStepDeadline = exports.reopenStep = exports.completeStep = exports.attachOutputDocument = exports.initWorkflowForCase = exports.getWorkflowForCase = exports.deleteTemplate = exports.updateTemplate = exports.createTemplate = exports.getTemplateById = exports.listAllTemplates = exports.listActiveTemplates = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const workflowTemplateModel_1 = __importDefault(require("../models/workflowTemplateModel"));
 const workflowInstanceModel_1 = __importDefault(require("../models/workflowInstanceModel"));
@@ -18,6 +18,121 @@ const actorFromReq = (req) => ({
     actorName: req.user?.name || 'System',
     actorUserId: req.user?.id,
 });
+const computeWorkflowMoney = (inst) => {
+    const plannedAmount = (inst.steps || []).reduce((sum, s) => sum + (typeof s.feeAmount === 'number' ? s.feeAmount : 0), 0);
+    const completedAmount = (inst.steps || []).reduce((sum, s) => sum + (s.status === 'Completed' && typeof s.feeAmount === 'number' ? s.feeAmount : 0), 0);
+    const currency = (inst.steps || []).map((s) => s.feeCurrency).find(Boolean);
+    return { plannedAmount, completedAmount, currency };
+};
+const computeNextDueAt = (inst) => {
+    const pending = (inst.steps || [])
+        .filter((s) => s.status !== 'Completed')
+        .slice()
+        .sort((a, b) => (a.order || 0) - (b.order || 0))[0];
+    return pending?.dueAt;
+};
+const updateCaseWorkflowProgress = async (c, inst) => {
+    const completedCount = (inst.steps || []).filter((s) => s.status === 'Completed').length;
+    const total = inst.steps.length || 1;
+    const percent = Math.round((completedCount / total) * 100);
+    const { plannedAmount, completedAmount, currency } = computeWorkflowMoney(inst);
+    const nextDueAt = computeNextDueAt(inst);
+    c.workflowProgress = {
+        status: inst.status === 'Completed' ? 'Completed' : 'In Progress',
+        currentStepKey: inst.currentStepKey,
+        currentStepTitle: (() => {
+            if (!inst.currentStepKey)
+                return undefined;
+            const ref = (inst.steps || []).find((s) => s.stepKey === inst.currentStepKey);
+            return ref?.title;
+        })(),
+        currentStepStartAt: (() => {
+            if (!inst.currentStepKey)
+                return undefined;
+            const ref = (inst.steps || []).find((s) => s.stepKey === inst.currentStepKey);
+            return ref?.startAt;
+        })(),
+        currentStepDueAt: (() => {
+            if (!inst.currentStepKey)
+                return undefined;
+            const ref = (inst.steps || []).find((s) => s.stepKey === inst.currentStepKey);
+            return ref?.dueAt;
+        })(),
+        percent,
+        nextDueAt,
+        plannedValue: { amount: plannedAmount || undefined, currency },
+        completedValue: { amount: completedAmount || undefined, currency },
+    };
+    await c.save();
+};
+const completeStepInternal = async (req, c, inst, stepKey) => {
+    const step = (inst.steps || []).find((s) => s.stepKey === stepKey);
+    if (!step)
+        throw new Error('Step not found.');
+    if (step.feeInputRequired && typeof step.feeAmount !== 'number') {
+        const err = new Error('Cannot complete step. Fee is required.');
+        err.statusCode = 400;
+        throw err;
+    }
+    // Enforce checklist completion if actions exist
+    const actions = Array.isArray(step.actions) ? step.actions : [];
+    const hasActions = actions.length > 0;
+    const allActionsDone = !hasActions || actions.every((a) => a?.done === true);
+    if (!allActionsDone) {
+        const remaining = actions.filter((a) => !a?.done).map((a) => a?.text).filter(Boolean);
+        const err = new Error('Cannot complete step. Pending key actions.');
+        err.statusCode = 400;
+        err.remainingActions = remaining;
+        throw err;
+    }
+    step.status = 'Completed';
+    step.completedAt = new Date();
+    const sorted = (inst.steps || []).slice().sort((a, b) => a.order - b.order);
+    const idx = sorted.findIndex((x) => x.stepKey === stepKey);
+    const next = sorted[idx + 1];
+    if (next) {
+        inst.currentStepKey = next.stepKey;
+        const nextRef = inst.steps.find((x) => x.stepKey === next.stepKey);
+        if (nextRef && nextRef.status === 'Not Started')
+            nextRef.status = 'In Progress';
+    }
+    else {
+        inst.status = 'Completed';
+    }
+    await inst.save();
+    await updateCaseWorkflowProgress(c, inst);
+    // Update billing buckets based on payment mode
+    const paymentMode = String(c.billingSettings?.paymentMode || 'postpaid');
+    if (paymentMode === 'prepaid') {
+        const remaining = Number(c.billingSettings?.prepaidRemaining) || 0;
+        const nextRemaining = Math.max(0, remaining - (typeof step.feeAmount === 'number' ? step.feeAmount : 0));
+        c.billingSettings = {
+            ...c.billingSettings,
+            prepaidRemaining: nextRemaining,
+        };
+        await c.save();
+    }
+    else {
+        const accrued = Number(c.billingSettings?.accruedUnbilled) || 0;
+        const nextAccrued = accrued + (typeof step.feeAmount === 'number' ? step.feeAmount : 0);
+        c.billingSettings = {
+            ...c.billingSettings,
+            paymentMode: 'postpaid',
+            accruedUnbilled: nextAccrued,
+        };
+        await c.save();
+    }
+    const actor = actorFromReq(req);
+    await (0, auditService_1.writeAudit)({
+        caseId: String(c._id),
+        actorName: actor.actorName,
+        ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
+        action: 'WORKFLOW_STEP_COMPLETED',
+        message: 'Completed workflow step',
+        detail: `${stepKey} • ${step.title}`,
+    });
+    return inst;
+};
 const canAssociateLikeAccessCase = async (req, foundCase) => {
     if (!isAssociateLike(req.user?.role))
         return false;
@@ -123,10 +238,31 @@ const getWorkflowForCase = async (req, res) => {
             if (!allowed)
                 return res.status(403).json({ message: 'Forbidden.' });
         }
-        const inst = await workflowInstanceModel_1.default.findOne({ caseId: new mongoose_1.default.Types.ObjectId(caseId) }).lean();
+        const inst = await workflowInstanceModel_1.default.findOne({ caseId: new mongoose_1.default.Types.ObjectId(caseId) });
         if (!inst)
             return res.status(404).json({ message: 'No workflow instance for this case.' });
-        res.json(inst);
+        // Backfill step actions from template if missing (safe for older instances)
+        try {
+            const t = await workflowTemplateModel_1.default.findById(inst.templateId).lean();
+            let changed = false;
+            for (const step of inst.steps || []) {
+                const hasActions = Array.isArray(step.actions) && step.actions.length > 0;
+                if (hasActions)
+                    continue;
+                const templateStep = (t?.steps || []).find((x) => x.key === step.stepKey);
+                const actions = (templateStep?.actions || []).map((text) => ({ text: String(text || '').trim(), done: false }));
+                if (actions.length) {
+                    step.actions = actions;
+                    changed = true;
+                }
+            }
+            if (changed)
+                await inst.save();
+        }
+        catch {
+            // ignore backfill failures
+        }
+        res.json(inst.toObject());
     }
     catch {
         res.status(500).json({ message: 'Failed to load workflow.' });
@@ -164,17 +300,7 @@ const initWorkflowForCase = async (req, res) => {
         c.workflowTemplateId = template._id;
         c.workflowInstanceId = inst._id;
         c.matterType = template.matterType;
-        const plannedAmount = steps.reduce((sum, s) => sum + (typeof s.feeAmount === 'number' ? s.feeAmount : 0), 0);
-        const plannedCurrency = steps.map((s) => s.feeCurrency).find(Boolean);
-        c.workflowProgress = {
-            status: 'In Progress',
-            currentStepKey: inst.currentStepKey,
-            percent: 0,
-            nextDueAt: steps[0]?.dueAt,
-            plannedValue: { amount: plannedAmount || undefined, currency: plannedCurrency },
-            completedValue: { amount: 0, currency: plannedCurrency },
-        };
-        await c.save();
+        await updateCaseWorkflowProgress(c, inst);
         const actor = actorFromReq(req);
         await (0, auditService_1.writeAudit)({
             caseId: String(c._id),
@@ -244,6 +370,28 @@ exports.attachOutputDocument = attachOutputDocument;
 // Complete a step (admin only)
 const completeStep = async (req, res) => {
     try {
+        const { caseId, stepKey } = req.params;
+        const c = await caseModel_1.default.findById(caseId);
+        if (!c)
+            return res.status(404).json({ message: 'Case not found.' });
+        const inst = await workflowInstanceModel_1.default.findOne({ caseId: c._id });
+        if (!inst)
+            return res.status(404).json({ message: 'Workflow instance not found.' });
+        const updated = await completeStepInternal(req, c, inst, stepKey);
+        res.json(updated);
+    }
+    catch (e) {
+        const status = typeof e?.statusCode === 'number' ? e.statusCode : 500;
+        res.status(status).json({
+            message: e?.message || 'Failed to complete step.',
+            ...(Array.isArray(e?.remainingActions) ? { remainingActions: e.remainingActions } : {}),
+        });
+    }
+};
+exports.completeStep = completeStep;
+// Reopen a completed step (admin only)
+const reopenStep = async (req, res) => {
+    try {
         if (!isAdmin(req.user?.role))
             return res.status(403).json({ message: 'Forbidden.' });
         const { caseId, stepKey } = req.params;
@@ -256,26 +404,16 @@ const completeStep = async (req, res) => {
         const step = (inst.steps || []).find((s) => s.stepKey === stepKey);
         if (!step)
             return res.status(404).json({ message: 'Step not found.' });
-        const missing = (step.outputs || []).filter((o) => o.required && !o.documentId);
-        if (missing.length) {
-            return res.status(400).json({
-                message: 'Cannot complete step. Missing required outputs.',
-                missingOutputs: missing.map((m) => ({ key: m.key, name: m.name })),
-            });
-        }
-        step.status = 'Completed';
-        step.completedAt = new Date();
-        const sorted = (inst.steps || []).slice().sort((a, b) => a.order - b.order);
-        const idx = sorted.findIndex((x) => x.stepKey === stepKey);
-        const next = sorted[idx + 1];
-        if (next) {
-            inst.currentStepKey = next.stepKey;
-            const nextRef = inst.steps.find((x) => x.stepKey === next.stepKey);
-            if (nextRef && nextRef.status === 'Not Started')
-                nextRef.status = 'In Progress';
-        }
-        else {
-            inst.status = 'Completed';
+        if (step.status !== 'Completed')
+            return res.status(400).json({ message: 'Step is not completed.' });
+        // Reopen the step
+        step.status = 'In Progress';
+        step.completedAt = undefined;
+        // Update current step to this one
+        inst.currentStepKey = stepKey;
+        // If workflow was completed, set it back to Active
+        if (inst.status === 'Completed') {
+            inst.status = 'Active';
         }
         await inst.save();
         const completedCount = inst.steps.filter((s) => s.status === 'Completed').length;
@@ -292,69 +430,33 @@ const completeStep = async (req, res) => {
             return pending?.dueAt;
         })();
         c.workflowProgress = {
-            status: inst.status === 'Completed' ? 'Completed' : 'In Progress',
+            status: 'In Progress',
             currentStepKey: inst.currentStepKey,
-            currentStepTitle: (() => {
-                if (!inst.currentStepKey)
-                    return undefined;
-                const ref = (inst.steps || []).find((s) => s.stepKey === inst.currentStepKey);
-                return ref?.title;
-            })(),
-            currentStepStartAt: (() => {
-                if (!inst.currentStepKey)
-                    return undefined;
-                const ref = (inst.steps || []).find((s) => s.stepKey === inst.currentStepKey);
-                return ref?.startAt;
-            })(),
-            currentStepDueAt: (() => {
-                if (!inst.currentStepKey)
-                    return undefined;
-                const ref = (inst.steps || []).find((s) => s.stepKey === inst.currentStepKey);
-                return ref?.dueAt;
-            })(),
+            currentStepTitle: step.title,
+            currentStepStartAt: step.startAt,
+            currentStepDueAt: step.dueAt,
             percent,
             nextDueAt,
             plannedValue: { amount: plannedAmount || undefined, currency },
             completedValue: { amount: completedAmount || undefined, currency },
         };
         await c.save();
-        // Update billing buckets based on payment mode
-        const paymentMode = String(c.billingSettings?.paymentMode || 'postpaid');
-        if (paymentMode === 'prepaid') {
-            const remaining = Number(c.billingSettings?.prepaidRemaining) || 0;
-            const nextRemaining = Math.max(0, remaining - (typeof step.feeAmount === 'number' ? step.feeAmount : 0));
-            c.billingSettings = {
-                ...c.billingSettings,
-                prepaidRemaining: nextRemaining,
-            };
-            await c.save();
-        }
-        else {
-            const accrued = Number(c.billingSettings?.accruedUnbilled) || 0;
-            const nextAccrued = accrued + (typeof step.feeAmount === 'number' ? step.feeAmount : 0);
-            c.billingSettings = {
-                ...c.billingSettings,
-                paymentMode: 'postpaid',
-                accruedUnbilled: nextAccrued,
-            };
-            await c.save();
-        }
         const actor = actorFromReq(req);
         await (0, auditService_1.writeAudit)({
             caseId: String(c._id),
             actorName: actor.actorName,
             ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
-            action: 'WORKFLOW_STEP_COMPLETED',
-            message: 'Completed workflow step',
+            action: 'WORKFLOW_STEP_REOPENED',
+            message: 'Reopened workflow step',
             detail: `${stepKey} • ${step.title}`,
         });
         res.json(inst);
     }
     catch {
-        res.status(500).json({ message: 'Failed to complete step.' });
+        res.status(500).json({ message: 'Failed to reopen step.' });
     }
 };
-exports.completeStep = completeStep;
+exports.reopenStep = reopenStep;
 // Extend a workflow step deadline (admin only)
 const extendStepDeadline = async (req, res) => {
     try {
@@ -412,4 +514,109 @@ const extendStepDeadline = async (req, res) => {
     }
 };
 exports.extendStepDeadline = extendStepDeadline;
+// Toggle a key action checkbox (admin only)
+const toggleStepAction = async (req, res) => {
+    try {
+        if (!isAdmin(req.user?.role))
+            return res.status(403).json({ message: 'Forbidden.' });
+        const { caseId, stepKey, index } = req.params;
+        const actionIndex = Number(index);
+        if (!Number.isInteger(actionIndex) || actionIndex < 0) {
+            return res.status(400).json({ message: 'Invalid action index.' });
+        }
+        const c = await caseModel_1.default.findById(caseId);
+        if (!c)
+            return res.status(404).json({ message: 'Case not found.' });
+        const inst = await workflowInstanceModel_1.default.findOne({ caseId: c._id });
+        if (!inst)
+            return res.status(404).json({ message: 'Workflow instance not found.' });
+        const step = (inst.steps || []).find((s) => s.stepKey === stepKey);
+        if (!step)
+            return res.status(404).json({ message: 'Step not found.' });
+        // Backfill actions from template if needed
+        if (!Array.isArray(step.actions) || step.actions.length === 0) {
+            const t = await workflowTemplateModel_1.default.findById(inst.templateId).lean();
+            const templateStep = (t?.steps || []).find((x) => x.key === stepKey);
+            step.actions = (templateStep?.actions || []).map((text) => ({ text: String(text || '').trim(), done: false }));
+        }
+        const actions = Array.isArray(step.actions) ? step.actions : [];
+        const target = actions[actionIndex];
+        if (!target)
+            return res.status(404).json({ message: 'Action not found.' });
+        const nextDone = !Boolean(target.done);
+        target.done = nextDone;
+        target.doneAt = nextDone ? new Date() : undefined;
+        if (step.status === 'Not Started')
+            step.status = 'In Progress';
+        const actor = actorFromReq(req);
+        await (0, auditService_1.writeAudit)({
+            caseId: String(c._id),
+            actorName: actor.actorName,
+            ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
+            action: 'WORKFLOW_STEP_ACTION_TOGGLED',
+            message: 'Updated workflow key action',
+            detail: `${stepKey} • ${target.text} • ${nextDone ? 'done' : 'not done'}`,
+        });
+        // If all key actions are done, auto-complete the step (and update case progress/billing)
+        const allDone = actions.length === 0 || actions.every((a) => a?.done === true);
+        if (allDone && step.status !== 'Completed') {
+            const updated = await completeStepInternal(req, c, inst, stepKey);
+            return res.json(updated);
+        }
+        await inst.save();
+        res.json(inst);
+    }
+    catch (e) {
+        const status = typeof e?.statusCode === 'number' ? e.statusCode : 500;
+        res.status(status).json({
+            message: e?.message || 'Failed to update key action.',
+            ...(Array.isArray(e?.remainingActions) ? { remainingActions: e.remainingActions } : {}),
+        });
+    }
+};
+exports.toggleStepAction = toggleStepAction;
+// Set a specific fee for a step (admin only; used for fee ranges)
+const setStepFeeAmount = async (req, res) => {
+    try {
+        if (!isAdmin(req.user?.role))
+            return res.status(403).json({ message: 'Forbidden.' });
+        const { caseId, stepKey } = req.params;
+        const { amount, currency } = req.body || {};
+        const feeAmount = Number(amount);
+        if (!Number.isFinite(feeAmount) || feeAmount < 0) {
+            return res.status(400).json({ message: 'amount must be a non-negative number.' });
+        }
+        const c = await caseModel_1.default.findById(caseId);
+        if (!c)
+            return res.status(404).json({ message: 'Case not found.' });
+        const inst = await workflowInstanceModel_1.default.findOne({ caseId: c._id });
+        if (!inst)
+            return res.status(404).json({ message: 'Workflow instance not found.' });
+        const step = (inst.steps || []).find((s) => s.stepKey === stepKey);
+        if (!step)
+            return res.status(404).json({ message: 'Step not found.' });
+        if (step.status === 'Completed')
+            return res.status(400).json({ message: 'Cannot change fee for a completed step.' });
+        step.feeAmount = feeAmount;
+        step.feeSetByUser = true;
+        if (typeof currency === 'string' && currency.trim())
+            step.feeCurrency = currency.trim().toUpperCase();
+        await inst.save();
+        await updateCaseWorkflowProgress(c, inst);
+        const actor = actorFromReq(req);
+        await (0, auditService_1.writeAudit)({
+            caseId: String(c._id),
+            actorName: actor.actorName,
+            ...(actor.actorUserId ? { actorUserId: actor.actorUserId } : {}),
+            action: 'WORKFLOW_STEP_FEE_SET',
+            message: 'Set workflow step fee',
+            detail: `${stepKey} • ${step.feeCurrency || ''} ${feeAmount}`,
+        });
+        res.json(inst);
+    }
+    catch (e) {
+        res.status(500).json({ message: e?.message || 'Failed to set step fee.' });
+    }
+};
+exports.setStepFeeAmount = setStepFeeAmount;
 //# sourceMappingURL=workflowController.js.map

@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Upload, CalendarPlus } from 'lucide-react';
+import { CalendarPlus } from 'lucide-react';
 import {
   getWorkflowForCase,
   completeWorkflowStep,
   reopenWorkflowStep,
   extendWorkflowStepDeadline,
+  toggleWorkflowStepAction,
+  setWorkflowStepFeeAmount,
   WorkflowInstance,
 } from '../../services/workflowInstanceService';
-import { addDocumentToCase } from '../../services/documentService';
-import { attachWorkflowOutput } from '../../services/workflowOutputService';
 import { getWorkflowTemplateById, WorkflowTemplate } from '../../services/workflowService';
 import {
   formatDueCountdown,
@@ -25,11 +25,13 @@ type Props = {
 };
 
 export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, onWorkflowChanged }: Props) {
+  void canUpload;
   const [wf, setWf] = useState<WorkflowInstance | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [busyKey, setBusyKey] = useState<string>('');
   const [template, setTemplate] = useState<WorkflowTemplate | null>(null);
+  const [feeDrafts, setFeeDrafts] = useState<Record<string, string>>({});
 
   const canExtendDeadlines = canCompleteSteps;
   const [extendOpenFor, setExtendOpenFor] = useState<string>('');
@@ -66,48 +68,40 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
     // eslint-disable-next-line
   }, [caseId]);
 
-  const uploadForOutput = async (stepKey: string, outputKey: string, outputName: string, category?: string) => {
-    if (!canUpload) return;
+  const toggleAction = async (stepKey: string, index: number) => {
+    if (!canCompleteSteps) return;
+    try {
+      setBusyKey(`action:${stepKey}:${index}`);
+      setErr('');
+      const updated = await toggleWorkflowStepAction(caseId, stepKey, index);
+      setWf(updated);
+      await onWorkflowChanged?.();
+    } catch (e: any) {
+      setErr(e.message || 'Failed to update key action');
+    } finally {
+      setBusyKey('');
+    }
+  };
 
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-
-      try {
-        setBusyKey(`${stepKey}:${outputKey}`);
-        setErr('');
-
-        // 1) upload document
-        const uploaded = await addDocumentToCase(caseId, {
-          name: outputName,
-          file,
-          category,
-          workflowInstanceId: wf?._id,
-          stepKey,
-          outputKey,
-        });
-
-        if (!uploaded?._id) throw new Error('Upload succeeded but documentId missing.');
-
-        // 2) attach to workflow output slot
-        await attachWorkflowOutput({
-          caseId,
-          stepKey,
-          outputKey,
-          documentId: uploaded._id,
-        });
-
-        // 3) refresh
-        await load();
-      } catch (e: any) {
-        setErr(e.message || 'Failed to upload deliverable');
-      } finally {
-        setBusyKey('');
-      }
-    };
-    input.click();
+  const applyFee = async (stepKey: string) => {
+    if (!canCompleteSteps) return;
+    const raw = feeDrafts[stepKey];
+    const n = Number(String(raw || '').replace(/,/g, '').trim());
+    if (!Number.isFinite(n) || n < 0) {
+      setErr('Enter a valid fee amount.');
+      return;
+    }
+    try {
+      setBusyKey(`fee:${stepKey}`);
+      setErr('');
+      const updated = await setWorkflowStepFeeAmount(caseId, stepKey, n);
+      setWf(updated);
+      await onWorkflowChanged?.();
+    } catch (e: any) {
+      setErr(e.message || 'Failed to set fee');
+    } finally {
+      setBusyKey('');
+    }
   };
 
   const onCompleteStep = async (stepKey: string) => {
@@ -196,14 +190,25 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
       {steps.map((s, index, arr) => {
         // Check if previous step is completed (or this is the first step)
         const previousStepCompleted = index === 0 || (arr[index - 1]?.status === 'Completed');
-        
-        // Check if step has required deliverables that are not uploaded
-        const hasMissingRequiredOutputs = (s.outputs || []).some((o) => o.required && !o.documentId);
-        
+
         // Determine if checkbox should be disabled for completing
         const isCompleted = s.status === 'Completed';
         const isLoading = busyKey === `complete:${s.stepKey}`;
-        const cannotComplete = !isCompleted && (!previousStepCompleted || hasMissingRequiredOutputs);
+
+        const stepActions = (s.actions && s.actions.length ? s.actions : undefined) || undefined;
+        const derivedActions = !stepActions
+          ? (() => {
+              const templateStep = template?.steps?.find((ts) => ts.key === s.stepKey);
+              const keyActions = templateStep?.actions || [];
+              return keyActions.map((text: string) => ({ text, done: false }));
+            })()
+          : stepActions;
+
+        const hasActions = (derivedActions || []).length > 0;
+        const allActionsDone = !hasActions || (derivedActions || []).every((a) => a.done);
+        const feePending = Boolean(s.feeInputRequired) && typeof s.feeAmount !== 'number';
+
+        const cannotComplete = !isCompleted && (!previousStepCompleted || !allActionsDone || feePending);
         
         // Build tooltip message
         let tooltipMessage = '';
@@ -211,16 +216,20 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
           tooltipMessage = 'Click to reopen step';
         } else if (!previousStepCompleted) {
           tooltipMessage = 'Complete previous steps first';
-        } else if (hasMissingRequiredOutputs) {
-          tooltipMessage = 'Upload required deliverables first';
+        } else if (feePending) {
+          tooltipMessage = 'Set the fee for this step first';
+        } else if (!allActionsDone) {
+          tooltipMessage = 'Complete all key actions first';
         } else {
           tooltipMessage = 'Click to mark as complete';
         }
 
+        const keyActions = derivedActions || [];
+
         return (
         <div key={s.stepKey} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <div>
+            <div className="flex-1">
               <div className="text-xs text-gray-500 dark:text-gray-400">{s.stepKey}</div>
               <div className="font-semibold text-gray-900 dark:text-gray-100">{s.title}</div>
               <div className="text-sm text-gray-600 dark:text-gray-400">Status: {s.status}</div>
@@ -233,21 +242,30 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
                 >
                   {formatDueCountdown(s.dueAt)}
                 </span>
-                {hasMissingRequiredOutputs && (
-                  <span className="text-xs text-red-600 dark:text-red-400" title="Missing required deliverables">
-                    ⚠ Required deliverables pending
-                  </span>
-                )}
                 {!previousStepCompleted && !isCompleted && (
                   <span className="text-xs text-gray-500 dark:text-gray-400" title="Previous steps must be completed first">
                     ← Complete previous steps first
+                  </span>
+                )}
+                {!allActionsDone && !isCompleted && hasActions && (
+                  <span className="text-xs text-amber-600 dark:text-amber-400" title="Pending key actions">
+                    ⏳ Key actions pending
+                  </span>
+                )}
+                {feePending && !isCompleted && (
+                  <span className="text-xs text-amber-600 dark:text-amber-400" title="Fee required">
+                    ⏳ Fee required
                   </span>
                 )}
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="flex flex-col items-end gap-1">
+              {/* Grey vertical line separator */}
+              <div className="h-16 w-px bg-gray-300 dark:bg-gray-600" />
+
+              {/* Fee section on the right side */}
+              <div className="flex flex-col items-end gap-1 pl-4">
                 {s.dueAt ? (
                   <span className="text-xs text-gray-500 dark:text-gray-400">Due {new Date(s.dueAt).toLocaleDateString()}</span>
                 ) : null}
@@ -256,6 +274,30 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
                 ) : s.feeText ? (
                   <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">Fee: {s.feeText}</span>
                 ) : null}
+                {Boolean(s.feeInputRequired) && !isCompleted && canCompleteSteps && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      value={feeDrafts[s.stepKey] ?? (typeof s.feeAmount === 'number' ? String(s.feeAmount) : '')}
+                      onChange={(e) => setFeeDrafts((prev) => ({ ...prev, [s.stepKey]: e.target.value }))}
+                      onBlur={() => {
+                        const raw = feeDrafts[s.stepKey];
+                        if (!raw) return;
+                        void applyFee(s.stepKey);
+                      }}
+                      inputMode="decimal"
+                      placeholder="Enter fee"
+                      className="w-28 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => applyFee(s.stepKey)}
+                      disabled={busyKey === `fee:${s.stepKey}`}
+                      className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60"
+                    >
+                      {busyKey === `fee:${s.stepKey}` ? 'Saving…' : 'Apply'}
+                    </button>
+                  </div>
+                )}
                 {s.slaMinutes ? (
                   <span className="text-xs text-gray-500 dark:text-gray-400">Duration: {Math.round(s.slaMinutes / 60)}h</span>
                 ) : s.slaText ? (
@@ -301,6 +343,48 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
               )}
             </div>
           </div>
+
+          {/* Key Actions section below the step header */}
+          {keyActions.length > 0 && (
+            <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+              <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-2">Key Actions</div>
+              <ul className="space-y-2">
+                {keyActions.map((action: any, idx: number) => {
+                  const isBusy = busyKey === `action:${s.stepKey}:${idx}`;
+                  const isDone = Boolean(action?.done);
+                  const label = typeof action === 'string' ? action : String(action?.text || '');
+                  return (
+                    <li key={idx} className="flex items-start gap-3">
+                      {canCompleteSteps ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleAction(s.stepKey, idx)}
+                          disabled={isBusy || isCompleted || !previousStepCompleted}
+                          className={`mt-0.5 h-5 w-5 rounded border flex items-center justify-center ${
+                            isDone ? 'bg-green-600 border-green-600' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
+                          } disabled:opacity-60`}
+                          title={isCompleted ? 'Step is completed' : !previousStepCompleted ? 'Complete previous steps first' : 'Toggle'}
+                        >
+                          {isDone ? <span className="text-white text-xs">✓</span> : null}
+                        </button>
+                      ) : (
+                        <div
+                          className={`mt-0.5 h-5 w-5 rounded border flex items-center justify-center ${
+                            isDone ? 'bg-green-600 border-green-600' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
+                          }`}
+                        >
+                          {isDone ? <span className="text-white text-xs">✓</span> : null}
+                        </div>
+                      )}
+                      <div className={`text-sm ${isDone ? 'text-gray-500 line-through' : 'text-gray-700 dark:text-gray-200'}`}>
+                        {label}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
           {extendOpenFor === s.stepKey && canExtendDeadlines ? (
             <div className="px-5 py-4 border-b border-gray-200 bg-gray-50">
@@ -352,44 +436,9 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
           ) : null}
 
           <div className="p-5">
-            <div className="text-sm font-medium text-gray-900 mb-3">Deliverables</div>
-
-            {s.outputs.length === 0 ? (
-              <div className="text-sm text-gray-500">No deliverables defined for this step.</div>
-            ) : (
-              <div className="space-y-3">
-                {s.outputs.map((o) => (
-                  <div key={o.key} className="flex items-center justify-between gap-3 border border-gray-200 rounded p-3">
-                    <div className="min-w-0">
-                      <div className="font-medium text-gray-900 truncate">
-                        {o.name} {o.required ? <span className="text-xs text-red-600">(required)</span> : null}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Output key: {o.key} {o.category ? `• Category: ${o.category}` : ''}
-                      </div>
-                      <div className="text-xs mt-1">
-                        {o.documentId ? (
-                          <span className="text-green-700 font-medium">Uploaded</span>
-                        ) : (
-                          <span className="text-gray-500">Not uploaded</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {canUpload && (
-                      <button
-                        onClick={() => uploadForOutput(s.stepKey, o.key, o.name, o.category)}
-                        disabled={busyKey === `${s.stepKey}:${o.key}`}
-                        className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                      >
-                        <Upload className="w-4 h-4" />
-                        Upload
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Documents and deliverables are managed in the <span className="font-medium text-gray-900 dark:text-gray-100">Documents</span> tab.
+            </div>
           </div>
         </div>
         );

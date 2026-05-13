@@ -24,10 +24,11 @@ export const getUrgencyColorFromRatio = (ratio: number | undefined): UrgencyColo
 };
 
 export const getUrgencyClass = (color: UrgencyColor) => {
-  if (color === 'green') return 'bg-green-100 text-green-700 border-green-200';
-  if (color === 'orange') return 'bg-orange-100 text-orange-700 border-orange-200';
-  if (color === 'red') return 'bg-red-100 text-red-700 border-red-200';
-  return 'bg-gray-100 text-gray-700 border-gray-200';
+  // Solid pills with white text for consistent emphasis
+  if (color === 'green') return 'bg-green-600 text-white border-green-700';
+  if (color === 'orange') return 'bg-orange-500 text-white border-orange-600';
+  if (color === 'red') return 'bg-red-600 text-white border-red-700';
+  return 'bg-gray-500 text-white border-gray-600';
 };
 
 export const formatDueCountdown = (dueAt?: Date | string) => {
@@ -41,4 +42,3 @@ export const formatDueCountdown = (dueAt?: Date | string) => {
   if (days === 1) return 'Tomorrow';
   return `${days}d`;
 };
-

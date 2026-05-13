@@ -30,6 +30,7 @@ export type WorkflowTemplate = {
     stageKey: string;
     order: number;
     description?: string;
+    actions?: string[];
     fee?: {
       amount: number;
       currency: string;

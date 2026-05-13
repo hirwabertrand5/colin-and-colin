@@ -16,7 +16,6 @@ const API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5000/a
 const getToken = () => localStorage.getItem('token');
 
 const SERVICE_LEVEL_LABELS = ['Legal Service', 'Category', 'Practice Area', 'Service Line', 'Sub-category', 'Detail'];
-const CREATE_CASE_DRAFT_KEY = 'createCaseDraft:v1';
 
 export default function CreateCase() {
   const navigate = useNavigate();
@@ -28,7 +27,6 @@ export default function CreateCase() {
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [draftNotice, setDraftNotice] = useState<string>('');
 
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
@@ -71,42 +69,6 @@ export default function CreateCase() {
     'Cope of Judgement',
     'Execution',
   ];
-
-  // Load draft (local-only)
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(CREATE_CASE_DRAFT_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (parsed?.formData) setFormData((prev) => ({ ...prev, ...parsed.formData }));
-      if (Array.isArray(parsed?.servicePath)) setServicePath(parsed.servicePath);
-      if (typeof parsed?.step === 'number') setStep(parsed.step);
-      setDraftNotice('Loaded your saved draft.');
-      setTimeout(() => setDraftNotice(''), 2500);
-    } catch {
-      // ignore
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const saveDraft = () => {
-    try {
-      localStorage.setItem(
-        CREATE_CASE_DRAFT_KEY,
-        JSON.stringify({
-          step,
-          servicePath,
-          formData,
-          savedAt: new Date().toISOString(),
-        })
-      );
-      setDraftNotice('Draft saved on this device.');
-      setTimeout(() => setDraftNotice(''), 2500);
-    } catch {
-      setDraftNotice('Failed to save draft.');
-      setTimeout(() => setDraftNotice(''), 2500);
-    }
-  };
 
   useEffect(() => {
     const fetchStaff = async () => {
@@ -508,9 +470,6 @@ export default function CreateCase() {
       {success && (
         <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">{success}</div>
       )}
-      {draftNotice && (
-        <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded">{draftNotice}</div>
-      )}
 
       {/* Form Content */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
@@ -667,30 +626,32 @@ export default function CreateCase() {
             </div>
 
             {selectedWorkflowTemplate ? (
-              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/30">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">Workflow Roadmap (Preview)</div>
-                    <div className="text-xs text-gray-600 mt-1">
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Workflow Roadmap (Preview)</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                       {selectedWorkflowTemplate.name ? `${selectedWorkflowTemplate.name} • ` : null}
                       {selectedWorkflowTemplate.matterType}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto">
-                    <div className="rounded-lg border border-gray-200 bg-white p-3">
-                      <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Workstream</div>
-                      <div className="mt-2 text-sm font-semibold text-gray-900">{workflowSummary?.stepCount || 0} steps</div>
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+                      <div className="text-xs uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">Workstream</div>
+                      <div className="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {workflowSummary?.stepCount || 0} steps
+                      </div>
                     </div>
-                    <div className="rounded-lg border border-gray-200 bg-white p-3">
-                      <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Next deadline</div>
-                      <div className="mt-2 text-sm font-semibold text-gray-900">
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+                      <div className="text-xs uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">Next deadline</div>
+                      <div className="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
                         {workflowSummary?.nextDueAt ? workflowSummary.nextDueAt.toLocaleDateString() : 'TBD'}
                       </div>
                     </div>
-                    <div className="rounded-lg border border-gray-200 bg-white p-3">
-                      <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Planned value</div>
-                      <div className="mt-2 text-sm font-semibold text-gray-900">
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+                      <div className="text-xs uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">Planned value</div>
+                      <div className="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
                         {workflowSummary ? formatCurrency(workflowSummary.totalFee, workflowSummary.currency) : 'RWF 0'}
                       </div>
                     </div>
@@ -698,39 +659,121 @@ export default function CreateCase() {
                 </div>
 
                 {workflowStageGroups.length === 0 ? (
-                  <div className="text-sm text-gray-500">This template has no steps yet.</div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">This template has no steps yet.</div>
                 ) : (
                   <div className="space-y-5">
                     {workflowStageGroups.map(([stage, steps]) => (
                       <div key={stage} className="space-y-3">
-                        <div className="text-sm font-semibold text-gray-900">{stage}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="h-5 w-1 rounded-full bg-gray-900/80 dark:bg-gray-100/80" />
+                          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{stage}</div>
+                        </div>
                         <div className="space-y-3">
-                          {steps.map((step) => (
-                            <div key={step.key} className="rounded-xl border border-gray-200 bg-white p-4">
-                              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                                <div className="min-w-0">
-                                  <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Step {step.stepIndex}</div>
-                                  <div className="text-base font-semibold text-gray-900 mt-1">{step.title}</div>
-                                  <div className="text-sm text-gray-600 mt-2">
-                                    {step.responsibleRole ? `Responsible: ${step.responsibleRole}` : 'Responsible role not set'}
-                                  </div>
-                                  <div className="mt-2 text-sm text-gray-600">
-                                    {step.slaLabel ? `Expected duration: ${step.slaLabel}` : 'Duration not defined'}
-                                  </div>
-                                </div>
+                          {steps.map((step) => {
+                            // Get key actions from the template step
+                            const templateStep = selectedWorkflowTemplate?.steps?.find((ts: any) => ts.key === step.key);
+                            const keyActions: string[] = templateStep?.actions || [];
 
-                                <div className="flex flex-col items-start gap-2 text-right">
-                                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${getUrgencyStyle(step.dueAt)}`}>
-                                    {formatRelativeDue(step.dueAt)}
-                                  </span>
-                                  <div className="text-xs text-gray-500">Due {step.dueAt.toLocaleDateString()}</div>
-                                  <div className="text-sm font-semibold text-gray-900">
-                                    {step.feeAmount ? formatCurrency(step.feeAmount, step.feeCurrency) : step.feeText || 'No fee set'}
+                            return (
+                              <div
+                                key={step.key}
+                                className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
+                              >
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {/* Left column: step info */}
+                                  <div className="min-w-0">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="inline-flex items-center gap-2">
+                                          <span className="inline-flex items-center rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em] text-gray-600 dark:text-gray-300">
+                                            STEP {step.stepIndex}
+                                          </span>
+                                        </div>
+                                        <div className="text-base font-semibold text-gray-900 dark:text-gray-100 mt-2 break-words">
+                                          {step.title}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      <div className="rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/30 px-3 py-2">
+                                        <div className="text-[11px] uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+                                          Responsible
+                                        </div>
+                                        <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                          {step.responsibleRole || 'Not set'}
+                                        </div>
+                                      </div>
+                                      <div className="rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/30 px-3 py-2">
+                                        <div className="text-[11px] uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+                                          Duration
+                                        </div>
+                                        <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                          {step.slaLabel || 'Not defined'}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Key Actions */}
+                                    {keyActions.length > 0 && (
+                                      <div className="mt-4">
+                                        <div className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-[0.18em] mb-2">
+                                          Key Actions
+                                        </div>
+                                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                          {keyActions.map((action: string, idx: number) => (
+                                            <li
+                                              key={idx}
+                                              className="flex items-start gap-2 rounded-lg border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200"
+                                            >
+                                              <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                                                <Check className="h-3.5 w-3.5" />
+                                              </span>
+                                              <span className="leading-5">{action}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Right column: fees & dates with visible divider */}
+                                  <div className="md:pl-5 md:border-l md:border-gray-200 dark:border-gray-700 border-t border-gray-100 pt-4 md:pt-0">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="text-[11px] uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+                                          Deadline
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                                          <span
+                                            className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${getUrgencyStyle(
+                                              step.dueAt
+                                            )}`}
+                                          >
+                                            {formatRelativeDue(step.dueAt)}
+                                          </span>
+                                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                                            Due {step.dueAt.toLocaleDateString()}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-4 rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/30 px-3 py-3">
+                                      <div className="text-[11px] uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+                                        Fee
+                                      </div>
+                                      <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">
+                                        {step.feeAmount
+                                          ? formatCurrency(step.feeAmount, step.feeCurrency)
+                                          : step.feeText || 'No fee set'}
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
@@ -771,13 +814,13 @@ export default function CreateCase() {
                         };
                       });
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900"
+                  className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900"
                   >
-                    <option value="postpaid">Client pays later (postpaid)</option>
+                    <option value="postpaid">Pay after recovery</option>
                     <option value="prepaid">Client pays first (prepaid)</option>
                   </select>
                   <p className="text-xs text-gray-500 mt-2">
-                    Prepaid will decrement as checklist items are completed. Postpaid will accrue unbilled fees.
+                    Prepaid will decrement as checklist items are completed. Pay after recovery will accrue unbilled fees.
                   </p>
                 </div>
 
@@ -846,7 +889,7 @@ export default function CreateCase() {
                   ['Next expected deadline', workflowSummary?.nextDueAt ? workflowSummary.nextDueAt.toLocaleDateString() : 'TBD'],
                   ['Estimated completion', workflowSummary?.completionDate ? workflowSummary.completionDate.toLocaleDateString() : 'TBD'],
                   ['Planned workflow value', workflowSummary ? formatCurrency(workflowSummary.totalFee, workflowSummary.currency) : 'RWF 0'],
-                  ['Payment mode', formData.billingSettings?.paymentMode === 'prepaid' ? 'Prepaid' : 'Postpaid'],
+                  ['Payment mode', formData.billingSettings?.paymentMode === 'prepaid' ? 'Prepaid' : 'Pay after recovery'],
                   [
                     'Prepaid amount',
                     formData.billingSettings?.paymentMode === 'prepaid'
@@ -890,13 +933,6 @@ export default function CreateCase() {
             className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={saveDraft}
-            className="px-4 py-2 rounded border border-blue-200 bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-          >
-            Save
           </button>
 
           {step < 3 ? (

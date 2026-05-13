@@ -13,6 +13,8 @@ import {
   completeStep,
   reopenStep,
   extendStepDeadline,
+  toggleStepAction,
+  setStepFeeAmount,
 } from '../controllers/workflowController';
 
 const router = express.Router();
@@ -59,6 +61,22 @@ router.post(
   authenticate,
   authorize(ADMIN_ROLES),
   extendStepDeadline
+);
+
+// Key actions (admin only)
+router.patch(
+  '/cases/:caseId/steps/:stepKey/actions/:index/toggle',
+  authenticate,
+  authorize(ADMIN_ROLES),
+  toggleStepAction
+);
+
+// Fee overrides (admin only)
+router.put(
+  '/cases/:caseId/steps/:stepKey/fee',
+  authenticate,
+  authorize(ADMIN_ROLES),
+  setStepFeeAmount
 );
 
 export default router;

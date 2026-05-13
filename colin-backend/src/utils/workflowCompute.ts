@@ -131,13 +131,19 @@ export const buildInstanceSteps = (template: IWorkflowTemplate | any, startDate:
 
   let cursor = new Date(startDate);
 
-  return sorted.map((s: any, idx: number) => {
+  const built = sorted.map((s: any, idx: number) => {
     const slaInfo = slaToMinutes(s.sla);
     const feeInfo = feeToMoney(s.fee);
 
     const stepStartAt = new Date(cursor);
     const dueAt = addMinutes(stepStartAt, slaInfo.minutes);
     cursor = new Date(dueAt);
+
+    const feeType = String(s?.fee?.type || '');
+    const feeCurrency = feeInfo.currency;
+    const feeRangeMin = feeType === 'range' && typeof s?.fee?.min === 'number' ? s.fee.min : undefined;
+    const feeRangeMax = feeType === 'range' && typeof s?.fee?.max === 'number' ? s.fee.max : undefined;
+    const feeInputRequired = feeType === 'range';
 
     return {
       stepKey: s.key,
@@ -149,14 +155,24 @@ export const buildInstanceSteps = (template: IWorkflowTemplate | any, startDate:
       startAt: stepStartAt,
       dueAt,
 
-      feeAmount: typeof feeInfo.amount === 'number' ? feeInfo.amount : undefined,
-      feeCurrency: feeInfo.currency,
-      feeText: feeInfo.text,
+      feeAmount: feeInputRequired ? undefined : typeof feeInfo.amount === 'number' ? feeInfo.amount : undefined,
+      feeCurrency,
+      feeText: feeInputRequired
+        ? feeInfo.text || (typeof feeRangeMin === 'number' && typeof feeRangeMax === 'number'
+          ? `Range: ${feeCurrency || ''} ${feeRangeMin} - ${feeRangeMax}`.trim()
+          : 'Range')
+        : feeInfo.text,
+      feeRangeMin,
+      feeRangeMax,
+      feeInputRequired,
+      feeSetByUser: false,
 
       slaMinutes: typeof slaInfo.minutes === 'number' ? slaInfo.minutes : undefined,
       slaText: slaInfo.text,
 
       responsibleRole: typeof s.responsibleRole === 'string' ? s.responsibleRole : undefined,
+
+      actions: (s.actions || []).map((text: any) => ({ text: String(text || '').trim(), done: false })),
 
       outputs: (s.outputs || []).map((o: any) => ({
         key: o.key,
@@ -166,4 +182,28 @@ export const buildInstanceSteps = (template: IWorkflowTemplate | any, startDate:
       })),
     };
   });
+
+  // Fee smoothing:
+  // If a step has no fee defined, split the previous numeric fee in half and assign to both steps.
+  for (let i = 1; i < built.length; i += 1) {
+    const prev = built[i - 1];
+    const cur = built[i];
+
+    const curHasNoFee =
+      typeof cur.feeAmount !== 'number' &&
+      !cur.feeInputRequired &&
+      !cur.feeText;
+    const prevHasFee = typeof prev.feeAmount === 'number';
+
+    if (curHasNoFee && prevHasFee) {
+      const original = prev.feeAmount as number;
+      const prevHalf = Math.floor(original / 2);
+      const curHalf = original - prevHalf;
+      prev.feeAmount = prevHalf;
+      cur.feeAmount = curHalf;
+      cur.feeCurrency = cur.feeCurrency || prev.feeCurrency;
+    }
+  }
+
+  return built;
 };
