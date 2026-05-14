@@ -24,6 +24,8 @@ export default function CreateCase() {
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templateManuallySelected, setTemplateManuallySelected] = useState(false);
+  const [feeOverrides, setFeeOverrides] = useState<Record<string, number>>({});
+  const [feeOverrideDrafts, setFeeOverrideDrafts] = useState<Record<string, string>>({});
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -246,7 +248,21 @@ export default function CreateCase() {
         throw new Error('Missing workflow template. Please select a workflow template.');
       }
 
-      await createCase(formData);
+      const plannedAmount = workflowSummary?.totalFee;
+      const plannedCurrency = workflowSummary?.currency;
+
+      const payload: CaseData = {
+        ...formData,
+        workflowProgress: {
+          ...(formData.workflowProgress || {}),
+          plannedValue:
+            typeof plannedAmount === 'number'
+              ? { amount: plannedAmount, currency: plannedCurrency || formData.billingSettings?.currency || 'RWF' }
+              : undefined,
+        },
+      };
+
+      await createCase(payload);
       setSuccess('Case created successfully!');
       setTimeout(() => navigate('/cases'), 1000);
     } catch (err: any) {
@@ -270,6 +286,12 @@ export default function CreateCase() {
     () => templates.find((t) => t._id === formData.workflowTemplateId),
     [formData.workflowTemplateId, templates]
   );
+
+  // Reset any per-step fee overrides when switching templates.
+  useEffect(() => {
+    setFeeOverrides({});
+    setFeeOverrideDrafts({});
+  }, [formData.workflowTemplateId]);
 
   // Auto-select a workflow template when the service-line decision tree suggests a matter type.
   useEffect(() => {
@@ -342,6 +364,33 @@ export default function CreateCase() {
     return 'bg-green-100 text-green-700';
   };
 
+  const clampNumber = (value: number, min?: number, max?: number) => {
+    if (!Number.isFinite(value)) return value;
+    if (typeof min === 'number' && value < min) return min;
+    if (typeof max === 'number' && value > max) return max;
+    return value;
+  };
+
+  const applyFeeOverride = (stepKey: string, min?: number, max?: number) => {
+    const raw = feeOverrideDrafts[stepKey];
+    const cleaned = String(raw ?? '').trim();
+    if (!cleaned) {
+      setFeeOverrides((prev) => {
+        const next = { ...prev };
+        delete next[stepKey];
+        return next;
+      });
+      return;
+    }
+
+    const value = Number(cleaned.replace(/[^\d.]/g, ''));
+    if (!Number.isFinite(value) || value < 0) return;
+
+    const clamped = clampNumber(value, min, max);
+    setFeeOverrides((prev) => ({ ...prev, [stepKey]: clamped }));
+    setFeeOverrideDrafts((prev) => ({ ...prev, [stepKey]: String(clamped) }));
+  };
+
   const selectedWorkflowSteps = useMemo(() => {
     if (!selectedWorkflowTemplate || !formData.workflowStartDate) return [];
 
@@ -359,13 +408,20 @@ export default function CreateCase() {
     const start = new Date(`${formData.workflowStartDate}T00:00:00`);
     let cursor = new Date(start);
 
-    return steps.map((s: any, index: number) => {
+    const derived = steps.map((s: any, index: number) => {
       const minutes = toMinutesFromSla(s.sla);
       const stepStart = new Date(cursor);
       const dueAt = new Date(stepStart.getTime() + minutes * 60_000);
       cursor = new Date(dueAt);
 
-      const feeAmount = typeof s?.fee?.min === 'number' ? s.fee.min : undefined;
+      const feeMin = typeof s?.fee?.min === 'number' ? s.fee.min : undefined;
+      const feeMax = typeof s?.fee?.max === 'number' ? s.fee.max : undefined;
+      const feeType = typeof s?.fee?.type === 'string' ? s.fee.type : undefined;
+      const isFeeRange =
+        feeType === 'range' || (typeof feeMin === 'number' && typeof feeMax === 'number' && feeMax > feeMin);
+
+      const overrideAmount = typeof feeOverrides[s.key] === 'number' ? feeOverrides[s.key] : undefined;
+      const feeAmount = overrideAmount ?? (typeof feeMin === 'number' ? feeMin : undefined);
       const feeCurrency = s?.fee?.currency || 'RWF';
       const slaLabel = typeof s?.sla?.max === 'number' && s?.sla?.unit ? `${s.sla.max} ${s.sla.unit}` : s?.sla?.text || '—';
 
@@ -374,7 +430,10 @@ export default function CreateCase() {
         title: s.title,
         stageLabel: stageTitleByKey.get(s.stageKey) || s.stageKey || 'Stage',
         responsibleRole: s.responsibleRole,
-        feeAmount: feeAmount,
+        feeAmount,
+        feeMin,
+        feeMax,
+        isFeeRange,
         feeCurrency,
         feeText: typeof s?.fee?.text === 'string' ? s.fee.text : undefined,
         slaLabel,
@@ -382,12 +441,38 @@ export default function CreateCase() {
         stepIndex: index + 1,
       };
     });
-  }, [selectedWorkflowTemplate, formData.workflowStartDate]);
+
+    // If a step has no fee amount set, split the previous step fee in half and assign half to this step.
+    // Example: prev=100, current=— => prev=50, current=50.
+    for (let i = 1; i < derived.length; i += 1) {
+      const prev = derived[i - 1];
+      const curr = derived[i];
+      const currHasAmount = typeof curr.feeAmount === 'number' && curr.feeAmount > 0;
+      const currIsRange = Boolean(curr.isFeeRange);
+      const currWasOverridden = typeof feeOverrides[curr.key] === 'number';
+      if (currHasAmount || currIsRange || currWasOverridden) continue;
+
+      const prevWasOverridden = typeof feeOverrides[prev.key] === 'number';
+      const prevIsRange = Boolean(prev.isFeeRange);
+      const prevAmount = typeof prev.feeAmount === 'number' ? prev.feeAmount : undefined;
+      if (prevWasOverridden || prevIsRange) continue;
+      if (typeof prevAmount !== 'number' || prevAmount <= 0) continue;
+
+      const half = prevAmount / 2;
+      prev.feeAmount = half;
+      curr.feeAmount = half;
+    }
+
+    return derived;
+  }, [selectedWorkflowTemplate, formData.workflowStartDate, feeOverrides]);
 
   const workflowSummary = useMemo(() => {
     if (selectedWorkflowSteps.length === 0) return null;
 
-    const totalFee = selectedWorkflowSteps.reduce((sum, step) => sum + (step.feeAmount || 0), 0);
+    const totalFee = selectedWorkflowSteps.reduce(
+      (sum, step) => sum + (typeof step.feeAmount === 'number' ? step.feeAmount : 0),
+      0
+    );
     const currency = selectedWorkflowSteps.find((step) => step.feeCurrency)?.feeCurrency || 'RWF';
     const nextStep = selectedWorkflowSteps.find((step) => step.dueAt >= new Date());
     const finalStep = selectedWorkflowSteps[selectedWorkflowSteps.length - 1];
@@ -764,10 +849,46 @@ export default function CreateCase() {
                                         Fee
                                       </div>
                                       <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">
-                                        {step.feeAmount
+                                        {typeof step.feeAmount === 'number'
                                           ? formatCurrency(step.feeAmount, step.feeCurrency)
                                           : step.feeText || 'No fee set'}
                                       </div>
+
+                                      {step.isFeeRange ? (
+                                        <div className="mt-2">
+                                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                                            Range:{' '}
+                                            {typeof step.feeMin === 'number' && typeof step.feeMax === 'number'
+                                              ? `${step.feeCurrency || 'RWF'} ${step.feeMin.toLocaleString()} – ${step.feeMax.toLocaleString()}`
+                                              : '—'}
+                                          </div>
+                                          <div className="mt-2 flex items-center gap-2">
+                                            <input
+                                              value={
+                                                feeOverrideDrafts[step.key] ??
+                                                (typeof feeOverrides[step.key] === 'number' ? String(feeOverrides[step.key]) : '')
+                                              }
+                                              onChange={(e) =>
+                                                setFeeOverrideDrafts((prev) => ({ ...prev, [step.key]: e.target.value }))
+                                              }
+                                              onBlur={() => applyFeeOverride(step.key, step.feeMin, step.feeMax)}
+                                              inputMode="decimal"
+                                              placeholder="Enter amount"
+                                              className="w-32 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => applyFeeOverride(step.key, step.feeMin, step.feeMax)}
+                                              className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                            >
+                                              Apply
+                                            </button>
+                                          </div>
+                                          <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                                            Leave blank to use the default amount.
+                                          </div>
+                                        </div>
+                                      ) : null}
                                     </div>
                                   </div>
                                 </div>
