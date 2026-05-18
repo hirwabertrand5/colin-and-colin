@@ -143,7 +143,7 @@ export const buildInstanceSteps = (template: IWorkflowTemplate | any, startDate:
     const feeCurrency = feeInfo.currency;
     const feeRangeMin = feeType === 'range' && typeof s?.fee?.min === 'number' ? s.fee.min : undefined;
     const feeRangeMax = feeType === 'range' && typeof s?.fee?.max === 'number' ? s.fee.max : undefined;
-    const feeInputRequired = feeType === 'range';
+    const feeInputRequired = false;
 
     return {
       stepKey: s.key,
@@ -155,7 +155,7 @@ export const buildInstanceSteps = (template: IWorkflowTemplate | any, startDate:
       startAt: stepStartAt,
       dueAt,
 
-      feeAmount: feeInputRequired ? undefined : typeof feeInfo.amount === 'number' ? feeInfo.amount : undefined,
+      feeAmount: typeof feeInfo.amount === 'number' ? feeInfo.amount : undefined,
       feeCurrency,
       feeText: feeInputRequired
         ? feeInfo.text || (typeof feeRangeMin === 'number' && typeof feeRangeMax === 'number'

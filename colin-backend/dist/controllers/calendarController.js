@@ -33,7 +33,19 @@ const getFirmEvents = async (req, res) => {
         }
         const events = await eventModel_1.default.find(eventFilter).sort({ date: 1, time: 1 });
         const caseIds = Array.from(new Set(events.map((e) => String(e.caseId))));
-        const cases = await caseModel_1.default.find({ _id: { $in: caseIds } }).select('_id caseNo parties');
+        const workflowCaseFilter = {
+            $or: [
+                { 'workflowProgress.currentStepDueAt': { $gte: new Date(`${from}T00:00:00.000Z`), $lte: new Date(`${to}T23:59:59.999Z`) } },
+                { 'workflowProgress.nextDueAt': { $gte: new Date(`${from}T00:00:00.000Z`), $lte: new Date(`${to}T23:59:59.999Z`) } },
+            ],
+        };
+        if (role !== 'managing_director' && role !== 'executive_assistant') {
+            workflowCaseFilter.assignedTo = userName;
+        }
+        const workflowCases = await caseModel_1.default.find(workflowCaseFilter).select('_id caseNo parties assignedTo workflowProgress');
+        const cases = await caseModel_1.default.find({
+            _id: { $in: Array.from(new Set([...caseIds, ...workflowCases.map((c) => String(c._id))])) },
+        }).select('_id caseNo parties');
         const caseMap = new Map(cases.map((c) => [String(c._id), c]));
         const result = events.map((e) => {
             const c = caseMap.get(String(e.caseId));
@@ -42,7 +54,38 @@ const getFirmEvents = async (req, res) => {
                 case: c ? { _id: String(c._id), caseNo: c.caseNo, parties: c.parties } : null,
             };
         });
-        res.json(result);
+        const qText = String(q || '').trim().toLowerCase();
+        const workflowEvents = workflowCases
+            .map((c) => {
+            const dueRaw = c.workflowProgress?.currentStepDueAt || c.workflowProgress?.nextDueAt;
+            if (!dueRaw)
+                return null;
+            const due = new Date(dueRaw);
+            if (!Number.isFinite(due.getTime()))
+                return null;
+            const title = `Next case step: ${c.workflowProgress?.currentStepTitle || 'Workflow step'}`;
+            const description = `Auto-generated from case workflow progress for ${c.caseNo || c.parties || 'case'}.`;
+            if (type && type !== 'all' && type !== 'Deadline')
+                return null;
+            if (qText) {
+                const haystack = `${title} ${description} ${c.caseNo || ''} ${c.parties || ''}`.toLowerCase();
+                if (!haystack.includes(qText))
+                    return null;
+            }
+            return {
+                _id: `workflow-${String(c._id)}`,
+                caseId: String(c._id),
+                title,
+                type: 'Deadline',
+                date: due.toISOString().slice(0, 10),
+                time: `${String(due.getHours()).padStart(2, '0')}:${String(due.getMinutes()).padStart(2, '0')}`,
+                description,
+                automated: true,
+                case: { _id: String(c._id), caseNo: c.caseNo, parties: c.parties },
+            };
+        })
+            .filter(Boolean);
+        res.json([...result, ...workflowEvents].sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)));
     }
     catch {
         res.status(500).json({ message: 'Failed to fetch firm calendar events.' });

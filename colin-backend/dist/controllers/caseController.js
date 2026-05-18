@@ -31,6 +31,19 @@ const canAssociateLikeAccessCase = async (req, foundCase) => {
     });
     return Boolean(hasTask);
 };
+const parseMoney = (value) => {
+    if (typeof value === 'number')
+        return Number.isFinite(value) && value > 0 ? value : 0;
+    const n = Number(String(value || '').replace(/[^\d.]/g, ''));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+};
+const calculateActionProgress = (steps, plannedAmount) => {
+    const actions = (steps || []).flatMap((step) => (Array.isArray(step.actions) ? step.actions : []));
+    const checked = actions.filter((action) => Boolean(action?.done)).length;
+    const total = actions.length;
+    const percent = total > 0 ? Math.round((checked / total) * 100) : 0;
+    return { percent, completedAmount: Math.round((plannedAmount * percent) / 100) };
+};
 const getAllCases = async (req, res) => {
     try {
         const role = req.user?.role;
@@ -78,7 +91,7 @@ const createCase = async (req, res) => {
                         ? Math.max(0, Number(bs.prepaidRemaining))
                         : normalizedPrepaidTotal
                     : 0,
-                accruedUnbilled: 0,
+                accruedUnbilled: Math.max(0, Number(bs.accruedUnbilled) || 0),
             };
         }
         await newCase.save();
@@ -89,6 +102,19 @@ const createCase = async (req, res) => {
             if (template) {
                 const wfStart = newCase.workflowStartDate || newCase.createdAt || new Date();
                 const steps = (0, workflowCompute_1.buildInstanceSteps)(template, wfStart);
+                const initialWorkflowActions = req.body?.initialWorkflowActions || {};
+                for (const step of steps) {
+                    const indexes = Array.isArray(initialWorkflowActions?.[step.stepKey])
+                        ? initialWorkflowActions[step.stepKey]
+                        : [];
+                    for (const idx of indexes) {
+                        const action = Array.isArray(step.actions) ? step.actions[Number(idx)] : undefined;
+                        if (action) {
+                            action.done = true;
+                            action.doneAt = new Date();
+                        }
+                    }
+                }
                 const inst = await workflowInstanceModel_1.default.create({
                     caseId: newCase._id,
                     templateId: template._id,
@@ -99,18 +125,31 @@ const createCase = async (req, res) => {
                 newCase.workflowTemplateId = template._id;
                 newCase.workflowInstanceId = inst._id;
                 newCase.matterType = template.matterType;
-                const plannedAmount = steps.reduce((sum, s) => sum + (typeof s.feeAmount === 'number' ? s.feeAmount : 0), 0);
-                const plannedCurrency = steps.map((s) => s.feeCurrency).find(Boolean);
+                const templatePlannedAmount = steps.reduce((sum, s) => sum + (typeof s.feeAmount === 'number' ? s.feeAmount : 0), 0);
+                const requestedPlannedAmount = parseMoney(req.body?.workflowProgress?.plannedValue?.amount) || parseMoney(req.body?.budget);
+                const plannedAmount = requestedPlannedAmount || templatePlannedAmount;
+                const plannedCurrency = req.body?.workflowProgress?.plannedValue?.currency ||
+                    steps.map((s) => s.feeCurrency).find(Boolean) ||
+                    newCase.billingSettings?.currency ||
+                    'RWF';
+                const actionProgress = calculateActionProgress(steps, plannedAmount);
                 newCase.workflowProgress = {
                     status: 'In Progress',
-                    percent: 0,
+                    percent: actionProgress.percent,
                     ...(inst.currentStepKey ? { currentStepKey: inst.currentStepKey } : {}),
                     ...(steps[0]?.title ? { currentStepTitle: steps[0].title } : {}),
                     ...(steps[0]?.startAt ? { currentStepStartAt: steps[0].startAt } : {}),
                     ...(steps[0]?.dueAt ? { currentStepDueAt: steps[0].dueAt } : {}),
                     nextDueAt: steps[0]?.dueAt,
                     plannedValue: { amount: plannedAmount || undefined, currency: plannedCurrency },
-                    completedValue: { amount: 0, currency: plannedCurrency },
+                    completedValue: { amount: actionProgress.completedAmount, currency: plannedCurrency },
+                };
+                newCase.billingSettings = {
+                    ...(newCase.billingSettings || {}),
+                    currency: plannedCurrency,
+                    prepaidTotal: 0,
+                    prepaidRemaining: 0,
+                    accruedUnbilled: actionProgress.completedAmount,
                 };
                 await newCase.save();
                 const actor = actorFromReq(req);
@@ -173,7 +212,11 @@ const updateCase = async (req, res) => {
         const beforeTemplateId = before?.workflowTemplateId ? String(before.workflowTemplateId) : '';
         const nextTemplateId = req.body?.workflowTemplateId ? String(req.body.workflowTemplateId) : '';
         const didChangeTemplate = Boolean(nextTemplateId && nextTemplateId !== beforeTemplateId);
-        const didChangeStartDate = Boolean(req.body?.workflowStartDate);
+        const beforeStart = before?.workflowStartDate ? new Date(before.workflowStartDate).toISOString().slice(0, 10) : '';
+        const nextStart = req.body?.workflowStartDate
+            ? new Date(req.body.workflowStartDate).toISOString().slice(0, 10)
+            : '';
+        const didChangeStartDate = Boolean(nextStart && nextStart !== beforeStart);
         if (didChangeTemplate || didChangeStartDate) {
             const templateIdToUse = nextTemplateId || beforeTemplateId;
             if (templateIdToUse) {
@@ -203,21 +246,58 @@ const updateCase = async (req, res) => {
                     updated.workflowInstanceId = inst._id;
                     updated.matterType = template.matterType;
                     updated.workflowStartDate = wfStart;
-                    const plannedAmount = steps.reduce((sum, s) => sum + (typeof s.feeAmount === 'number' ? s.feeAmount : 0), 0);
-                    const plannedCurrency = steps.map((s) => s.feeCurrency).find(Boolean);
+                    const templatePlannedAmount = steps.reduce((sum, s) => sum + (typeof s.feeAmount === 'number' ? s.feeAmount : 0), 0);
+                    const requestedPlannedAmount = parseMoney(req.body?.workflowProgress?.plannedValue?.amount) ||
+                        parseMoney(req.body?.budget) ||
+                        parseMoney(updated.workflowProgress?.plannedValue?.amount);
+                    const plannedAmount = requestedPlannedAmount || templatePlannedAmount;
+                    const plannedCurrency = req.body?.workflowProgress?.plannedValue?.currency ||
+                        steps.map((s) => s.feeCurrency).find(Boolean) ||
+                        updated.billingSettings?.currency ||
+                        'RWF';
+                    const actionProgress = calculateActionProgress(steps, plannedAmount);
                     updated.workflowProgress = {
                         status: 'In Progress',
-                        percent: 0,
+                        percent: actionProgress.percent,
                         ...(inst.currentStepKey ? { currentStepKey: inst.currentStepKey } : {}),
                         ...(steps[0]?.title ? { currentStepTitle: steps[0].title } : {}),
                         ...(steps[0]?.startAt ? { currentStepStartAt: steps[0].startAt } : {}),
                         ...(steps[0]?.dueAt ? { currentStepDueAt: steps[0].dueAt } : {}),
                         nextDueAt: steps[0]?.dueAt,
                         plannedValue: { amount: plannedAmount || undefined, currency: plannedCurrency },
-                        completedValue: { amount: 0, currency: plannedCurrency },
+                        completedValue: { amount: actionProgress.completedAmount, currency: plannedCurrency },
+                    };
+                    updated.billingSettings = {
+                        ...(updated.billingSettings || {}),
+                        currency: plannedCurrency,
+                        prepaidTotal: 0,
+                        prepaidRemaining: 0,
+                        accruedUnbilled: actionProgress.completedAmount,
                     };
                     await updated.save();
                 }
+            }
+        }
+        if (!didChangeTemplate && !didChangeStartDate && req.body?.workflowProgress?.plannedValue) {
+            const plannedAmount = parseMoney(req.body.workflowProgress.plannedValue.amount);
+            if (plannedAmount > 0) {
+                const plannedCurrency = req.body.workflowProgress.plannedValue.currency || updated.billingSettings?.currency || 'RWF';
+                const inst = await workflowInstanceModel_1.default.findOne({ caseId: updated._id }).lean();
+                const actionProgress = calculateActionProgress(inst?.steps || [], plannedAmount);
+                updated.workflowProgress = {
+                    ...(updated.workflowProgress || {}),
+                    plannedValue: { amount: plannedAmount, currency: plannedCurrency },
+                    percent: actionProgress.percent,
+                    completedValue: { amount: actionProgress.completedAmount, currency: plannedCurrency },
+                };
+                updated.billingSettings = {
+                    ...(updated.billingSettings || {}),
+                    currency: plannedCurrency,
+                    prepaidTotal: 0,
+                    prepaidRemaining: 0,
+                    accruedUnbilled: actionProgress.completedAmount,
+                };
+                await updated.save();
             }
         }
         const changes = [];

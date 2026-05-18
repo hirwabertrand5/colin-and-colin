@@ -420,7 +420,7 @@ export default function Calendar({ userRole }: CalendarProps) {
                         <div className="flex items-center gap-2 mb-1">
                           {row.kind === 'event' ? (
                             <span className={`px-2 py-0.5 text-xs rounded border ${getTypeColorClass(row.data.type)}`}>
-                              {row.data.type}
+                              {row.data.automated ? 'Workflow deadline' : row.data.type}
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 text-xs rounded border bg-gray-100 text-gray-800 border-gray-200">
@@ -471,7 +471,9 @@ export default function Calendar({ userRole }: CalendarProps) {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       {u.kind === 'event' ? (
-                        <span className={`px-2 py-0.5 text-xs rounded border ${getTypeColorClass(u.data.type)}`}>{u.data.type}</span>
+                        <span className={`px-2 py-0.5 text-xs rounded border ${getTypeColorClass(u.data.type)}`}>
+                          {u.data.automated ? 'Workflow deadline' : u.data.type}
+                        </span>
                       ) : (
                         <span className="px-2 py-0.5 text-xs rounded border bg-gray-100 text-gray-800 border-gray-200">Task Due</span>
                       )}
@@ -574,7 +576,7 @@ export default function Calendar({ userRole }: CalendarProps) {
                 </button>
               )}
 
-              {detailItem.kind === 'event' && isMDorEA && (
+              {detailItem.kind === 'event' && isMDorEA && !detailItem.data.automated && (
                 <>
                   <button
                     type="button"

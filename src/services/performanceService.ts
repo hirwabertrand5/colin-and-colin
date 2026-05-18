@@ -9,6 +9,12 @@ export type PerformanceSummary = {
   tasksTotal: number;
   billableHours: number;
   onTimeCompletionPct: number;
+  deadlineBreakdown?: {
+    early: number;
+    onTime: number;
+    late: number;
+    overdue: number;
+  };
 
   approvals: {
     pending: number;

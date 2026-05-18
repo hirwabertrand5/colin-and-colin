@@ -144,6 +144,7 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
 
     const billableHours = data?.billableHours ?? 0;
     const onTime = data?.onTimeCompletionPct ?? 0;
+    const deadlines = data?.deadlineBreakdown;
 
     const hasAnyTasks = workflowSignals.totalTasks > 0;
 
@@ -183,6 +184,14 @@ export default function PerformanceDashboard({ userRole }: PerformanceDashboardP
         helper: 'Completed vs due date',
         icon: TrendingUp,
         trendText: onTime ? `${onTime}%` : '—',
+      },
+      {
+        label: 'Early / On Time / Late',
+        value: deadlines ? `${deadlines.early}/${deadlines.onTime}/${deadlines.late}` : '—',
+        helper: 'Deadline behavior',
+        icon: CalendarIcon,
+        trendText: deadlines ? `${deadlines.overdue} overdue` : '—',
+        color: deadlines?.late || deadlines?.overdue ? 'red' : undefined,
       },
       {
         label: 'Overdue Tasks',

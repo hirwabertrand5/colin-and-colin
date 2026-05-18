@@ -4,6 +4,8 @@ import { DollarSign, TrendingUp, TrendingDown, Receipt } from 'lucide-react';
 import { UserRole } from '../../App';
 import { getBillingSummary, BillingSummary } from '../../services/billingService';
 import { getRecentInvoices, InvoiceWithCase } from '../../services/invoiceService';
+import { getAllCases, CaseData } from '../../services/caseService';
+import { getActivePettyCashFund, listExpensesForFund, PettyCashExpense } from '../../services/pettyCashService';
 import usePageTitle from '../../hooks/usePageTitle';
 
 interface BillingDashboardProps {
@@ -20,6 +22,8 @@ export default function BillingDashboard({ userRole }: BillingDashboardProps) {
 
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [recent, setRecent] = useState<InvoiceWithCase[]>([]);
+  const [cases, setCases] = useState<CaseData[]>([]);
+  const [caseExpenses, setCaseExpenses] = useState<PettyCashExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   usePageTitle('Billing & Finance');
@@ -36,11 +40,19 @@ export default function BillingDashboard({ userRole }: BillingDashboardProps) {
         setError('');
 
         // Overall summary: do NOT pass from/to; backend defaults to last 6 months
-        const [s, r] = await Promise.all([getBillingSummary(), getRecentInvoices(5)]);
+        const [s, r, allCases, fund] = await Promise.all([
+          getBillingSummary(),
+          getRecentInvoices(5),
+          getAllCases(),
+          getActivePettyCashFund().catch(() => null),
+        ]);
+        const expenses = fund?._id ? await listExpensesForFund(fund._id).catch(() => []) : [];
 
         if (!mounted) return;
         setSummary(s);
         setRecent(r);
+        setCases(allCases);
+        setCaseExpenses(expenses.filter((expense) => expense.chargeType === 'client' && expense.caseId));
       } catch (e: any) {
         if (!mounted) return;
         setError(e?.message || 'Failed to load billing dashboard.');
@@ -76,6 +88,24 @@ export default function BillingDashboard({ userRole }: BillingDashboardProps) {
     const max = months.reduce((m, x) => Math.max(m, x.billed, x.collected), 0);
     return Math.max(1, Math.ceil(max * 1.1));
   }, [summary?.months]);
+
+  const valueHealth = useMemo(() => {
+    const planned = cases.reduce((sum, item) => sum + (Number(item.workflowProgress?.plannedValue?.amount) || 0), 0);
+    const earned = cases.reduce((sum, item) => sum + (Number(item.workflowProgress?.completedValue?.amount) || 0), 0);
+    const spent = caseExpenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const remaining = planned - spent;
+    const spentRatio = planned > 0 ? Math.round((spent / planned) * 100) : 0;
+    const margin = earned - spent;
+    const color = planned > 0 && spent > planned ? 'red' : spentRatio >= 85 ? 'red' : spentRatio >= 65 ? 'yellow' : 'green';
+    return { planned, earned, spent, remaining, spentRatio, margin, color };
+  }, [caseExpenses, cases]);
+
+  const healthClass =
+    valueHealth.color === 'red'
+      ? 'bg-red-600'
+      : valueHealth.color === 'yellow'
+        ? 'bg-yellow-500'
+        : 'bg-green-600';
 
   const getStatusChip = (status: 'Paid' | 'Pending') =>
     status === 'Paid'
@@ -136,6 +166,46 @@ export default function BillingDashboard({ userRole }: BillingDashboardProps) {
 
       {/* Bottom Panels */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="font-semibold text-gray-900">Planned Value Health</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Compares negotiated case value with case-linked petty cash spend and cleared workflow value.
+              </p>
+            </div>
+            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold text-white ${healthClass}`}>
+              {valueHealth.spent > valueHealth.planned && valueHealth.planned > 0
+                ? 'Plan exceeded'
+                : valueHealth.color === 'red'
+                  ? 'Low remaining value'
+                  : valueHealth.color === 'yellow'
+                    ? 'Watch spend'
+                    : 'Healthy'}
+            </span>
+          </div>
+          <div className="mt-5">
+            <div className="mb-2 flex justify-between text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+              <span>Planned value spent</span>
+              <span>{loading ? '…' : `${valueHealth.spentRatio}%`}</span>
+            </div>
+            <div className="h-3 overflow-hidden rounded-full bg-gray-200">
+              <div className={`h-3 rounded-full ${healthClass}`} style={{ width: `${Math.min(100, valueHealth.spentRatio)}%` }} />
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div><div className="text-sm text-gray-500">Planned</div><div className="text-xl font-semibold text-gray-900">{formatRwf(valueHealth.planned)}</div></div>
+            <div><div className="text-sm text-gray-500">Cleared/Earned</div><div className="text-xl font-semibold text-green-700">{formatRwf(valueHealth.earned)}</div></div>
+            <div><div className="text-sm text-gray-500">Case Spend</div><div className="text-xl font-semibold text-gray-900">{formatRwf(valueHealth.spent)}</div></div>
+            <div>
+              <div className="text-sm text-gray-500">{valueHealth.margin >= 0 ? 'Profit Margin' : 'Loss'}</div>
+              <div className={`text-xl font-semibold ${valueHealth.margin >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {formatRwf(Math.abs(valueHealth.margin))}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Recent invoices (latest 5) */}
         <div className="bg-white border border-gray-200 rounded-lg">
           <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">

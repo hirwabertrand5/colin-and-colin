@@ -32,11 +32,17 @@ const computeNextDueAt = (inst) => {
     return pending?.dueAt;
 };
 const updateCaseWorkflowProgress = async (c, inst) => {
-    const completedCount = (inst.steps || []).filter((s) => s.status === 'Completed').length;
-    const total = inst.steps.length || 1;
-    const percent = Math.round((completedCount / total) * 100);
     const { plannedAmount, completedAmount, currency } = computeWorkflowMoney(inst);
     const nextDueAt = computeNextDueAt(inst);
+    const existingPlannedAmount = typeof c.workflowProgress?.plannedValue?.amount === 'number'
+        ? c.workflowProgress.plannedValue.amount
+        : Number(String(c.budget || '').replace(/[^\d.]/g, '')) || plannedAmount;
+    const existingCurrency = c.workflowProgress?.plannedValue?.currency || c.billingSettings?.currency || currency || 'RWF';
+    const actions = (inst.steps || []).flatMap((step) => (Array.isArray(step.actions) ? step.actions : []));
+    const checkedActions = actions.filter((action) => Boolean(action?.done)).length;
+    const actionTotal = actions.length;
+    const percent = actionTotal > 0 ? Math.round((checkedActions / actionTotal) * 100) : 0;
+    const actionCompletedAmount = actionTotal > 0 ? Math.round((existingPlannedAmount * percent) / 100) : completedAmount;
     c.workflowProgress = {
         status: inst.status === 'Completed' ? 'Completed' : 'In Progress',
         currentStepKey: inst.currentStepKey,
@@ -60,8 +66,15 @@ const updateCaseWorkflowProgress = async (c, inst) => {
         })(),
         percent,
         nextDueAt,
-        plannedValue: { amount: plannedAmount || undefined, currency },
-        completedValue: { amount: completedAmount || undefined, currency },
+        plannedValue: { amount: existingPlannedAmount || undefined, currency: existingCurrency },
+        completedValue: { amount: actionCompletedAmount || 0, currency: existingCurrency },
+    };
+    c.billingSettings = {
+        ...(c.billingSettings || {}),
+        currency: existingCurrency,
+        prepaidTotal: 0,
+        prepaidRemaining: 0,
+        accruedUnbilled: actionCompletedAmount || 0,
     };
     await c.save();
 };
@@ -69,11 +82,6 @@ const completeStepInternal = async (req, c, inst, stepKey) => {
     const step = (inst.steps || []).find((s) => s.stepKey === stepKey);
     if (!step)
         throw new Error('Step not found.');
-    if (step.feeInputRequired && typeof step.feeAmount !== 'number') {
-        const err = new Error('Cannot complete step. Fee is required.');
-        err.statusCode = 400;
-        throw err;
-    }
     // Enforce checklist completion if actions exist
     const actions = Array.isArray(step.actions) ? step.actions : [];
     const hasActions = actions.length > 0;
@@ -101,27 +109,6 @@ const completeStepInternal = async (req, c, inst, stepKey) => {
     }
     await inst.save();
     await updateCaseWorkflowProgress(c, inst);
-    // Update billing buckets based on payment mode
-    const paymentMode = String(c.billingSettings?.paymentMode || 'postpaid');
-    if (paymentMode === 'prepaid') {
-        const remaining = Number(c.billingSettings?.prepaidRemaining) || 0;
-        const nextRemaining = Math.max(0, remaining - (typeof step.feeAmount === 'number' ? step.feeAmount : 0));
-        c.billingSettings = {
-            ...c.billingSettings,
-            prepaidRemaining: nextRemaining,
-        };
-        await c.save();
-    }
-    else {
-        const accrued = Number(c.billingSettings?.accruedUnbilled) || 0;
-        const nextAccrued = accrued + (typeof step.feeAmount === 'number' ? step.feeAmount : 0);
-        c.billingSettings = {
-            ...c.billingSettings,
-            paymentMode: 'postpaid',
-            accruedUnbilled: nextAccrued,
-        };
-        await c.save();
-    }
     const actor = actorFromReq(req);
     await (0, auditService_1.writeAudit)({
         caseId: String(c._id),
@@ -416,31 +403,7 @@ const reopenStep = async (req, res) => {
             inst.status = 'Active';
         }
         await inst.save();
-        const completedCount = inst.steps.filter((s) => s.status === 'Completed').length;
-        const total = inst.steps.length || 1;
-        const percent = Math.round((completedCount / total) * 100);
-        const plannedAmount = (inst.steps || []).reduce((sum, s) => sum + (typeof s.feeAmount === 'number' ? s.feeAmount : 0), 0);
-        const completedAmount = (inst.steps || []).reduce((sum, s) => sum + (s.status === 'Completed' && typeof s.feeAmount === 'number' ? s.feeAmount : 0), 0);
-        const currency = (inst.steps || []).map((s) => s.feeCurrency).find(Boolean);
-        const nextDueAt = (() => {
-            const pending = (inst.steps || [])
-                .filter((s) => s.status !== 'Completed')
-                .slice()
-                .sort((a, b) => (a.order || 0) - (b.order || 0))[0];
-            return pending?.dueAt;
-        })();
-        c.workflowProgress = {
-            status: 'In Progress',
-            currentStepKey: inst.currentStepKey,
-            currentStepTitle: step.title,
-            currentStepStartAt: step.startAt,
-            currentStepDueAt: step.dueAt,
-            percent,
-            nextDueAt,
-            plannedValue: { amount: plannedAmount || undefined, currency },
-            completedValue: { amount: completedAmount || undefined, currency },
-        };
-        await c.save();
+        await updateCaseWorkflowProgress(c, inst);
         const actor = actorFromReq(req);
         await (0, auditService_1.writeAudit)({
             caseId: String(c._id),
@@ -544,10 +507,47 @@ const toggleStepAction = async (req, res) => {
         if (!target)
             return res.status(404).json({ message: 'Action not found.' });
         const nextDone = !Boolean(target.done);
+        if (nextDone) {
+            const orderedSteps = (inst.steps || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+            const flatActions = orderedSteps.flatMap((orderedStep) => (orderedStep.actions || []).map((action, idx) => ({
+                step: orderedStep,
+                action,
+                idx,
+                key: orderedStep.stepKey,
+            })));
+            const currentFlatIndex = flatActions.findIndex((item) => item.key === stepKey && item.idx === actionIndex);
+            const previousIncomplete = flatActions.slice(0, currentFlatIndex).find((item) => !item.action?.done);
+            if (previousIncomplete) {
+                return res.status(400).json({ message: 'Complete the previous key action first.' });
+            }
+        }
         target.done = nextDone;
         target.doneAt = nextDone ? new Date() : undefined;
         if (step.status === 'Not Started')
             step.status = 'In Progress';
+        if (!nextDone) {
+            const orderedSteps = (inst.steps || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+            const stepIndex = orderedSteps.findIndex((orderedStep) => orderedStep.stepKey === stepKey);
+            for (const orderedStep of orderedSteps.slice(stepIndex)) {
+                const actionsToReset = orderedStep.stepKey === stepKey
+                    ? (orderedStep.actions || []).slice(actionIndex + 1)
+                    : (orderedStep.actions || []);
+                for (const action of actionsToReset) {
+                    action.done = false;
+                    action.doneAt = undefined;
+                }
+                if (orderedStep.stepKey === stepKey) {
+                    orderedStep.status = 'In Progress';
+                    orderedStep.completedAt = undefined;
+                }
+                else {
+                    orderedStep.status = 'Not Started';
+                    orderedStep.completedAt = undefined;
+                }
+            }
+            inst.status = 'Active';
+            inst.currentStepKey = stepKey;
+        }
         const actor = actorFromReq(req);
         await (0, auditService_1.writeAudit)({
             caseId: String(c._id),
@@ -564,6 +564,7 @@ const toggleStepAction = async (req, res) => {
             return res.json(updated);
         }
         await inst.save();
+        await updateCaseWorkflowProgress(c, inst);
         res.json(inst);
     }
     catch (e) {

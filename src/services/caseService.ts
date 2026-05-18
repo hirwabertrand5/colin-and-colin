@@ -63,6 +63,8 @@ export interface CaseData {
     accruedUnbilled?: number;
   };
 
+  initialWorkflowActions?: Record<string, number[]>;
+
   createdAt?: string;
   updatedAt?: string;
 }

@@ -170,9 +170,7 @@ export default function WorkflowTemplates() {
   const [err, setErr] = useState('');
 
   const [selected, setSelected] = useState<Template | null>(null);
-  const [tab, setTab] = useState<'form' | 'json'>('form');
   const [form, setForm] = useState<TemplateForm | null>(null);
-  const [jsonEditor, setJsonEditor] = useState<string>('');
 
   const load = async () => {
     setLoading(true);
@@ -195,8 +193,6 @@ export default function WorkflowTemplates() {
     setSelected(t);
     const nextForm = templateToForm(t);
     setForm(nextForm);
-    setJsonEditor(JSON.stringify(t, null, 2));
-    setTab('form');
   };
 
   const validationError = useMemo(() => {
@@ -233,24 +229,6 @@ export default function WorkflowTemplates() {
     if (!selected) return;
     try {
       setErr('');
-      if (tab === 'json') {
-        const parsed = JSON.parse(jsonEditor);
-        if (selected._id === NEW_ID) {
-          if (parsed && typeof parsed === 'object') delete parsed._id;
-          const created = await createWorkflowTemplate(parsed);
-          await load();
-          setSelected(created);
-          setForm(templateToForm(created));
-          setJsonEditor(JSON.stringify(created, null, 2));
-          alert('Template created');
-          return;
-        }
-        await updateWorkflowTemplate(selected._id, parsed);
-        await load();
-        alert('Template saved');
-        return;
-      }
-
       if (!form) return;
       if (validationError) throw new Error(validationError);
 
@@ -260,14 +238,12 @@ export default function WorkflowTemplates() {
         await load();
         setSelected(created);
         setForm(templateToForm(created));
-        setJsonEditor(JSON.stringify(created, null, 2));
         alert('Template created');
       } else {
         const updated = await updateWorkflowTemplate(selected._id, payload);
         await load();
         setSelected(updated);
         setForm(templateToForm(updated));
-        setJsonEditor(JSON.stringify(updated, null, 2));
         alert('Template saved');
       }
     } catch (e: any) {
@@ -285,7 +261,10 @@ export default function WorkflowTemplates() {
         caseType: 'Transactional Cases' as const,
         version: 1,
         active: true,
-        stages: [{ key: 'intake', title: 'Intake', order: 1 }],
+        stages: [
+          { key: 'intake', title: 'Intake', order: 1 },
+          { key: 'execution', title: 'Execution', order: 2 },
+        ],
         steps: [
           {
             order: 1,
@@ -294,16 +273,24 @@ export default function WorkflowTemplates() {
             actions: ['Collect documents', 'Open file'],
             outputs: ['Client ID', 'Engagement letter'],
             legalBasis: [],
-            fee: { text: '' },
-            sla: { text: '' },
+            fee: { type: 'fixed', min: 0, currency: 'RWF' },
+            sla: { unit: 'days', max: 1 },
+          },
+          {
+            order: 2,
+            stageKey: 'execution',
+            title: 'Deliver service',
+            actions: ['Prepare work product', 'Send update to client'],
+            outputs: ['Deliverable'],
+            legalBasis: [],
+            fee: { type: 'fixed', min: 0, currency: 'RWF' },
+            sla: { unit: 'days', max: 7 },
           },
         ],
       };
       setSelected(draft);
       const nextForm = templateToForm(draft);
       setForm(nextForm);
-      setJsonEditor(JSON.stringify(draft, null, 2));
-      setTab('form');
     } catch (e: any) {
       setErr(e.message || 'Failed to create template');
     }
@@ -315,7 +302,6 @@ export default function WorkflowTemplates() {
       await deleteWorkflowTemplate(id);
       setSelected(null);
       setForm(null);
-      setJsonEditor('');
       await load();
     } catch (e: any) {
       setErr(e.message || 'Failed to delete template');
@@ -328,16 +314,6 @@ export default function WorkflowTemplates() {
       .map((s) => ({ key: (s.key || '').trim(), title: (s.title || '').trim() }))
       .filter((s) => s.key);
   }, [form?.stages]);
-
-  useEffect(() => {
-    if (!selected || !form) return;
-    if (tab !== 'form') return;
-    setJsonEditor((cur) => {
-      const next = JSON.stringify({ ...selected, ...formToPayload(form) }, null, 2);
-      return cur === next ? cur : next;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form, selected, tab]);
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6">
@@ -406,42 +382,15 @@ export default function WorkflowTemplates() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-2 mb-4">
-                <button
-                  type="button"
-                  onClick={() => setTab('form')}
-                  className={`px-3 py-1.5 rounded text-sm border ${
-                    tab === 'form' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300'
-                  }`}
-                >
-                  Form
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTab('json')}
-                  className={`px-3 py-1.5 rounded text-sm border ${
-                    tab === 'json' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300'
-                  }`}
-                >
-                  Advanced (JSON)
-                </button>
-                {tab === 'form' && validationError && (
-                  <span className="text-xs text-red-700">{validationError}</span>
-                )}
+              <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                <div className="text-sm font-semibold text-gray-900">Guided template builder</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Add stages, then add steps under those stages. Key actions become the checklist users complete inside each case.
+                </p>
+                {validationError && <div className="mt-2 text-xs text-red-700">{validationError}</div>}
               </div>
 
-              {tab === 'json' ? (
-                <>
-                  <textarea
-                    value={jsonEditor}
-                    onChange={(e) => setJsonEditor(e.target.value)}
-                    rows={26}
-                    className="w-full font-mono text-xs border border-gray-300 rounded p-3"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">Use only if you are comfortable editing JSON.</p>
-                </>
-              ) : (
-                <>
+              <>
                   {!form ? (
                     <div className="text-sm text-gray-500">Loading template…</div>
                   ) : (
@@ -911,7 +860,6 @@ export default function WorkflowTemplates() {
                     </div>
                   )}
                 </>
-              )}
             </>
           )}
         </div>

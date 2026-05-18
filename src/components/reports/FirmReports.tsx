@@ -113,6 +113,11 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
           activeCases: t.activeCases,
           tasksCompleted: t.tasksCompleted,
           billableHours: t.billableHours,
+          earnedFees: t.earnedFees || 0,
+          earlyTasks: t.earlyTasks || 0,
+          onTimeTasks: t.onTimeTasks || 0,
+          lateTasks: t.lateTasks || 0,
+          overdueTasks: t.overdueTasks || 0,
         }))
       )
     );
@@ -247,6 +252,7 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase">Role</th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase">Active cases</th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase">Tasks completed</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase">Fees earned</th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase">Billable hours</th>
                     </tr>
                   </thead>
@@ -257,6 +263,7 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
                         <td className="px-5 py-4 text-sm text-gray-600">{member.role}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{member.activeCases}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{member.tasksCompleted}</td>
+                        <td className="px-5 py-4 text-sm font-medium text-gray-900">{fmtMoney(member.earnedFees || 0)}</td>
                         <td className="px-5 py-4 text-sm text-gray-600">{member.billableHours}</td>
                       </tr>
                     ))}
@@ -362,6 +369,11 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Team Member</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Tasks Completed</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Fees Earned</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Early</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">On Time</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Late</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Overdue</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Hours</th>
                   </tr>
                 </thead>
@@ -370,6 +382,11 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
                     <tr key={member.name}>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{member.name}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{member.tasksCompleted}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{fmtMoney(member.earnedFees || 0)}</td>
+                      <td className="px-4 py-3 text-sm text-green-700">{member.earlyTasks || 0}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{member.onTimeTasks || 0}</td>
+                      <td className="px-4 py-3 text-sm text-yellow-700">{member.lateTasks || 0}</td>
+                      <td className="px-4 py-3 text-sm text-red-700">{member.overdueTasks || 0}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{member.billableHours}</td>
                     </tr>
                   ))}

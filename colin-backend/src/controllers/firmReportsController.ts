@@ -93,7 +93,7 @@ export const getFirmReports = async (req: AuthRequest, res: Response) => {
         status: 'Completed',
         completedAt: { $gte: fromDate, $lte: toDate },
       })
-        .select('assignee completedAt')
+        .select('assignee completedAt dueDate caseId')
         .lean(),
       TaskTimeLog.find({
         loggedAt: { $gte: fromDate, $lte: toDate },
@@ -112,9 +112,49 @@ export const getFirmReports = async (req: AuthRequest, res: Response) => {
     }
 
     const completedTasksByName = new Map<string, number>();
+    const earlyByName = new Map<string, number>();
+    const onTimeByName = new Map<string, number>();
+    const lateByName = new Map<string, number>();
+    const completedCaseIds = Array.from(new Set((tasksCompleted as any[]).map((t) => String(t.caseId)).filter(Boolean)));
+    const completedCases = await Case.find({ _id: { $in: completedCaseIds } })
+      .select('_id workflowProgress.completedValue')
+      .lean();
+    const caseEarnedById = new Map(
+      (completedCases as any[]).map((c) => [String(c._id), Number(c.workflowProgress?.completedValue?.amount) || 0])
+    );
+    const completedTaskCountByCase = new Map<string, number>();
+    for (const t of tasksCompleted as any[]) {
+      const caseId = String(t.caseId || '');
+      if (!caseId) continue;
+      completedTaskCountByCase.set(caseId, (completedTaskCountByCase.get(caseId) || 0) + 1);
+    }
+    const earnedByName = new Map<string, number>();
     for (const t of tasksCompleted as any[]) {
       const name = String(t.assignee || '—').trim();
       completedTasksByName.set(name, (completedTasksByName.get(name) || 0) + 1);
+      const due = new Date(`${t.dueDate}T23:59:59.999`);
+      const completed = t.completedAt ? new Date(t.completedAt) : undefined;
+      if (completed && Number.isFinite(due.getTime())) {
+        const diffHours = (due.getTime() - completed.getTime()) / (1000 * 60 * 60);
+        if (diffHours >= 24) earlyByName.set(name, (earlyByName.get(name) || 0) + 1);
+        else if (diffHours >= 0) onTimeByName.set(name, (onTimeByName.get(name) || 0) + 1);
+        else lateByName.set(name, (lateByName.get(name) || 0) + 1);
+      }
+      const caseId = String(t.caseId || '');
+      const taskShare = (caseEarnedById.get(caseId) || 0) / Math.max(1, completedTaskCountByCase.get(caseId) || 1);
+      earnedByName.set(name, (earnedByName.get(name) || 0) + taskShare);
+    }
+
+    const overdueTasks = await Task.find({
+      status: { $ne: 'Completed' },
+      dueDate: { $lt: iso(new Date()) },
+    })
+      .select('assignee')
+      .lean();
+    const overdueByName = new Map<string, number>();
+    for (const t of overdueTasks as any[]) {
+      const name = String(t.assignee || '—').trim();
+      overdueByName.set(name, (overdueByName.get(name) || 0) + 1);
     }
 
     const hoursByName = new Map<string, number>();
@@ -132,6 +172,11 @@ export const getFirmReports = async (req: AuthRequest, res: Response) => {
           activeCases: activeByName.get(name) || 0,
           tasksCompleted: completedTasksByName.get(name) || 0,
           billableHours: Math.round(((hoursByName.get(name) || 0) * 10)) / 10,
+          earnedFees: Math.round((earnedByName.get(name) || 0) * 100) / 100,
+          earlyTasks: earlyByName.get(name) || 0,
+          onTimeTasks: onTimeByName.get(name) || 0,
+          lateTasks: lateByName.get(name) || 0,
+          overdueTasks: overdueByName.get(name) || 0,
         };
       })
       .sort((a, b) => b.activeCases - a.activeCases);

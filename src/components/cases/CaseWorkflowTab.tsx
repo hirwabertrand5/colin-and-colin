@@ -6,7 +6,6 @@ import {
   reopenWorkflowStep,
   extendWorkflowStepDeadline,
   toggleWorkflowStepAction,
-  setWorkflowStepFeeAmount,
   WorkflowInstance,
 } from '../../services/workflowInstanceService';
 import { getWorkflowTemplateById, WorkflowTemplate } from '../../services/workflowService';
@@ -31,7 +30,6 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
   const [err, setErr] = useState('');
   const [busyKey, setBusyKey] = useState<string>('');
   const [template, setTemplate] = useState<WorkflowTemplate | null>(null);
-  const [feeDrafts, setFeeDrafts] = useState<Record<string, string>>({});
 
   const canExtendDeadlines = canCompleteSteps;
   const [extendOpenFor, setExtendOpenFor] = useState<string>('');
@@ -78,27 +76,6 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
       await onWorkflowChanged?.();
     } catch (e: any) {
       setErr(e.message || 'Failed to update key action');
-    } finally {
-      setBusyKey('');
-    }
-  };
-
-  const applyFee = async (stepKey: string) => {
-    if (!canCompleteSteps) return;
-    const raw = feeDrafts[stepKey];
-    const n = Number(String(raw || '').replace(/,/g, '').trim());
-    if (!Number.isFinite(n) || n < 0) {
-      setErr('Enter a valid fee amount.');
-      return;
-    }
-    try {
-      setBusyKey(`fee:${stepKey}`);
-      setErr('');
-      const updated = await setWorkflowStepFeeAmount(caseId, stepKey, n);
-      setWf(updated);
-      await onWorkflowChanged?.();
-    } catch (e: any) {
-      setErr(e.message || 'Failed to set fee');
     } finally {
       setBusyKey('');
     }
@@ -171,6 +148,23 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
   if (!wf) return <div className="py-8 text-gray-500">No workflow found for this case.</div>;
 
   const steps = [...wf.steps].sort((a, b) => a.order - b.order);
+  const orderedActionRefs = steps.flatMap((step) => {
+    const stepActions = (step.actions && step.actions.length ? step.actions : undefined) || undefined;
+    const derivedActions = !stepActions
+      ? (() => {
+          const templateStep = template?.steps?.find((ts) => ts.key === step.stepKey);
+          const keyActions = templateStep?.actions || [];
+          return keyActions.map((text: string) => ({ text, done: false }));
+        })()
+      : stepActions;
+    return (derivedActions || []).map((action: any, idx: number) => ({ stepKey: step.stepKey, idx, done: Boolean(action?.done) }));
+  });
+
+  const canCheckAction = (stepKey: string, idx: number) => {
+    const currentIndex = orderedActionRefs.findIndex((action) => action.stepKey === stepKey && action.idx === idx);
+    if (currentIndex <= 0) return true;
+    return orderedActionRefs.slice(0, currentIndex).every((action) => action.done);
+  };
 
   return (
     <div className="space-y-4">
@@ -206,9 +200,7 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
 
         const hasActions = (derivedActions || []).length > 0;
         const allActionsDone = !hasActions || (derivedActions || []).every((a) => a.done);
-        const feePending = Boolean(s.feeInputRequired) && typeof s.feeAmount !== 'number';
-
-        const cannotComplete = !isCompleted && (!previousStepCompleted || !allActionsDone || feePending);
+        const cannotComplete = !isCompleted && (!previousStepCompleted || !allActionsDone);
         
         // Build tooltip message
         let tooltipMessage = '';
@@ -216,8 +208,6 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
           tooltipMessage = 'Click to reopen step';
         } else if (!previousStepCompleted) {
           tooltipMessage = 'Complete previous steps first';
-        } else if (feePending) {
-          tooltipMessage = 'Set the fee for this step first';
         } else if (!allActionsDone) {
           tooltipMessage = 'Complete all key actions first';
         } else {
@@ -252,11 +242,6 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
                     ⏳ Key actions pending
                   </span>
                 )}
-                {feePending && !isCompleted && (
-                  <span className="text-xs text-amber-600 dark:text-amber-400" title="Fee required">
-                    ⏳ Fee required
-                  </span>
-                )}
               </div>
             </div>
 
@@ -274,30 +259,6 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
                 ) : s.feeText ? (
                   <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">Fee: {s.feeText}</span>
                 ) : null}
-                {Boolean(s.feeInputRequired) && !isCompleted && canCompleteSteps && (
-                  <div className="mt-1 flex items-center gap-2">
-                    <input
-                      value={feeDrafts[s.stepKey] ?? (typeof s.feeAmount === 'number' ? String(s.feeAmount) : '')}
-                      onChange={(e) => setFeeDrafts((prev) => ({ ...prev, [s.stepKey]: e.target.value }))}
-                      onBlur={() => {
-                        const raw = feeDrafts[s.stepKey];
-                        if (!raw) return;
-                        void applyFee(s.stepKey);
-                      }}
-                      inputMode="decimal"
-                      placeholder="Enter fee"
-                      className="w-28 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => applyFee(s.stepKey)}
-                      disabled={busyKey === `fee:${s.stepKey}`}
-                      className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60"
-                    >
-                      {busyKey === `fee:${s.stepKey}` ? 'Saving…' : 'Apply'}
-                    </button>
-                  </div>
-                )}
                 {s.slaMinutes ? (
                   <span className="text-xs text-gray-500 dark:text-gray-400">Duration: {Math.round(s.slaMinutes / 60)}h</span>
                 ) : s.slaText ? (
@@ -359,11 +320,17 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
                         <button
                           type="button"
                           onClick={() => toggleAction(s.stepKey, idx)}
-                          disabled={isBusy || isCompleted || !previousStepCompleted}
+                          disabled={isBusy || (!isDone && (!previousStepCompleted || !canCheckAction(s.stepKey, idx)))}
                           className={`mt-0.5 h-5 w-5 rounded border flex items-center justify-center ${
                             isDone ? 'bg-green-600 border-green-600' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
                           } disabled:opacity-60`}
-                          title={isCompleted ? 'Step is completed' : !previousStepCompleted ? 'Complete previous steps first' : 'Toggle'}
+                          title={
+                            !isDone && !canCheckAction(s.stepKey, idx)
+                              ? 'Complete the previous key action first'
+                              : !previousStepCompleted
+                                ? 'Complete previous steps first'
+                                : 'Toggle key action'
+                          }
                         >
                           {isDone ? <span className="text-white text-xs">✓</span> : null}
                         </button>

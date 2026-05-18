@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Save } from 'lucide-react';
 import { createCase, CaseData, CaseType } from '../../services/caseService';
 import { listActiveWorkflowTemplates, WorkflowTemplate } from '../../services/workflowService';
 import { LEGAL_SERVICES_TREE, ServiceNode } from '../../constants/legalServicesTree';
@@ -14,6 +14,7 @@ type StaffUser = {
 
 const API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5000/api';
 const getToken = () => localStorage.getItem('token');
+const CASE_DRAFT_KEY = 'colin:create-case-draft';
 
 const SERVICE_LEVEL_LABELS = ['Legal Service', 'Category', 'Practice Area', 'Service Line', 'Sub-category', 'Detail'];
 
@@ -24,8 +25,8 @@ export default function CreateCase() {
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templateManuallySelected, setTemplateManuallySelected] = useState(false);
-  const [feeOverrides, setFeeOverrides] = useState<Record<string, number>>({});
-  const [feeOverrideDrafts, setFeeOverrideDrafts] = useState<Record<string, string>>({});
+  const [plannedValueDraft, setPlannedValueDraft] = useState('');
+  const [checkedActions, setCheckedActions] = useState<Record<string, Record<number, boolean>>>({});
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -52,11 +53,7 @@ export default function CreateCase() {
     workflowStartDate: new Date().toISOString().slice(0, 10),
 
     billingSettings: {
-      paymentMode: 'postpaid',
       currency: 'RWF',
-      prepaidTotal: 0,
-      prepaidRemaining: 0,
-      accruedUnbilled: 0,
     },
   });
 
@@ -71,6 +68,20 @@ export default function CreateCase() {
     'Cope of Judgement',
     'Execution',
   ];
+
+  useEffect(() => {
+    const saved = localStorage.getItem(CASE_DRAFT_KEY);
+    if (!saved) return;
+    try {
+      const draft = JSON.parse(saved);
+      if (draft?.formData) setFormData((prev) => ({ ...prev, ...draft.formData }));
+      if (Array.isArray(draft?.servicePath)) setServicePath(draft.servicePath);
+      if (typeof draft?.plannedValueDraft === 'string') setPlannedValueDraft(draft.plannedValueDraft);
+      if (draft?.checkedActions && typeof draft.checkedActions === 'object') setCheckedActions(draft.checkedActions);
+    } catch {
+      // Ignore a stale draft; the user can save a fresh one.
+    }
+  }, []);
 
   useEffect(() => {
     const fetchStaff = async () => {
@@ -235,6 +246,95 @@ export default function CreateCase() {
     if (step > 1) setStep(step - 1);
   };
 
+  const parseMoney = (value: string) => {
+    const n = Number(String(value || '').replace(/[^\d.]/g, ''));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+
+  const plannedValueAmount = useMemo(() => parseMoney(plannedValueDraft), [plannedValueDraft]);
+
+  const selectedWorkflowTemplate = useMemo(
+    () => templates.find((t) => t._id === formData.workflowTemplateId),
+    [formData.workflowTemplateId, templates]
+  );
+
+  const workflowActionTotals = useMemo(() => {
+    if (!selectedWorkflowTemplate) return { total: 0, checked: 0, percent: 0 };
+    let total = 0;
+    let checked = 0;
+    selectedWorkflowTemplate.steps?.forEach((templateStep: any) => {
+      const actions: string[] = Array.isArray(templateStep?.actions) ? templateStep.actions : [];
+      total += actions.length;
+      actions.forEach((_, idx) => {
+        if (checkedActions[templateStep.key]?.[idx]) checked += 1;
+      });
+    });
+    return {
+      total,
+      checked,
+      percent: total > 0 ? Math.round((checked / total) * 100) : 0,
+    };
+  }, [checkedActions, selectedWorkflowTemplate]);
+
+  const earnedValueAmount = useMemo(
+    () => Math.round((plannedValueAmount * workflowActionTotals.percent) / 100),
+    [plannedValueAmount, workflowActionTotals.percent]
+  );
+
+  const orderedPreviewActions = useMemo(() => {
+    const byOrder = [...(selectedWorkflowTemplate?.steps || [])].sort(
+      (a: any, b: any) => (a.order || 0) - (b.order || 0)
+    );
+    return byOrder.flatMap((templateStep: any) =>
+      (Array.isArray(templateStep.actions) ? templateStep.actions : []).map((text: string, index: number) => ({
+        stepKey: templateStep.key,
+        index,
+        text,
+      }))
+    );
+  }, [selectedWorkflowTemplate]);
+
+  const canCheckPreviewAction = (stepKey: string, index: number) => {
+    const currentIndex = orderedPreviewActions.findIndex((action) => action.stepKey === stepKey && action.index === index);
+    if (currentIndex <= 0) return true;
+    return orderedPreviewActions.slice(0, currentIndex).every((action) => checkedActions[action.stepKey]?.[action.index]);
+  };
+
+  const togglePreviewAction = (stepKey: string, index: number) => {
+    const isCurrentlyChecked = Boolean(checkedActions[stepKey]?.[index]);
+    if (!isCurrentlyChecked && !canCheckPreviewAction(stepKey, index)) return;
+    setCheckedActions((prev) => {
+      const next: Record<string, Record<number, boolean>> = Object.fromEntries(
+        Object.entries(prev).map(([key, value]) => [key, { ...value }])
+      );
+      const nextValue = !Boolean(prev[stepKey]?.[index]);
+      next[stepKey] = { ...(next[stepKey] || {}), [index]: nextValue };
+
+      if (!nextValue) {
+        const currentIndex = orderedPreviewActions.findIndex((action) => action.stepKey === stepKey && action.index === index);
+        orderedPreviewActions.slice(currentIndex + 1).forEach((action) => {
+          next[action.stepKey] = { ...(next[action.stepKey] || {}), [action.index]: false };
+        });
+      }
+      return next;
+    });
+  };
+
+  const handleSaveDraft = () => {
+    localStorage.setItem(
+      CASE_DRAFT_KEY,
+      JSON.stringify({
+        formData,
+        servicePath,
+        plannedValueDraft,
+        checkedActions,
+        savedAt: new Date().toISOString(),
+      })
+    );
+    setSuccess('Draft saved on this device.');
+    setError('');
+  };
+
   const handleSubmit = async () => {
     setLoading(true);
     setError('');
@@ -248,21 +348,41 @@ export default function CreateCase() {
         throw new Error('Missing workflow template. Please select a workflow template.');
       }
 
-      const plannedAmount = workflowSummary?.totalFee;
-      const plannedCurrency = workflowSummary?.currency;
+      if (plannedValueAmount <= 0) {
+        throw new Error('Enter the negotiated planned value before creating the case.');
+      }
+
+      const plannedCurrency = workflowSummary?.currency || formData.billingSettings?.currency || 'RWF';
 
       const payload: CaseData = {
         ...formData,
+        budget: String(plannedValueAmount),
+        initialWorkflowActions: Object.fromEntries(
+          (selectedWorkflowTemplate?.steps || [])
+            .map((templateStep: any) => [
+              templateStep.key,
+              Object.entries(checkedActions[templateStep.key] || {})
+                .filter(([, checked]) => checked)
+                .map(([idx]) => Number(idx)),
+            ])
+            .filter(([, indexes]) => (indexes as number[]).length > 0)
+        ),
         workflowProgress: {
           ...(formData.workflowProgress || {}),
-          plannedValue:
-            typeof plannedAmount === 'number'
-              ? { amount: plannedAmount, currency: plannedCurrency || formData.billingSettings?.currency || 'RWF' }
-              : undefined,
+          percent: workflowActionTotals.percent,
+          plannedValue: { amount: plannedValueAmount, currency: plannedCurrency },
+          completedValue: { amount: earnedValueAmount, currency: plannedCurrency },
+        },
+        billingSettings: {
+          currency: plannedCurrency,
+          prepaidTotal: 0,
+          prepaidRemaining: 0,
+          accruedUnbilled: earnedValueAmount,
         },
       };
 
       await createCase(payload);
+      localStorage.removeItem(CASE_DRAFT_KEY);
       setSuccess('Case created successfully!');
       setTimeout(() => navigate('/cases'), 1000);
     } catch (err: any) {
@@ -277,21 +397,10 @@ export default function CreateCase() {
       return Boolean(formData.caseNo && formData.parties && formData.assignedTo && isServiceSelectionValid());
     }
     if (step === 2) {
-      return Boolean(formData.workflowTemplateId && formData.workflowStartDate);
+      return Boolean(formData.workflowTemplateId && formData.workflowStartDate && plannedValueAmount > 0);
     }
     return true;
   };
-
-  const selectedWorkflowTemplate = useMemo(
-    () => templates.find((t) => t._id === formData.workflowTemplateId),
-    [formData.workflowTemplateId, templates]
-  );
-
-  // Reset any per-step fee overrides when switching templates.
-  useEffect(() => {
-    setFeeOverrides({});
-    setFeeOverrideDrafts({});
-  }, [formData.workflowTemplateId]);
 
   // Auto-select a workflow template when the service-line decision tree suggests a matter type.
   useEffect(() => {
@@ -360,35 +469,8 @@ export default function CreateCase() {
     if (!date) return 'bg-gray-100 text-gray-700';
     const hoursRemaining = (date.getTime() - new Date().getTime()) / (1000 * 60 * 60);
     if (hoursRemaining <= 48) return 'bg-red-100 text-red-700';
-    if (hoursRemaining <= 120) return 'bg-orange-100 text-orange-700';
+    if (hoursRemaining <= 120) return 'bg-yellow-100 text-yellow-700';
     return 'bg-green-100 text-green-700';
-  };
-
-  const clampNumber = (value: number, min?: number, max?: number) => {
-    if (!Number.isFinite(value)) return value;
-    if (typeof min === 'number' && value < min) return min;
-    if (typeof max === 'number' && value > max) return max;
-    return value;
-  };
-
-  const applyFeeOverride = (stepKey: string, min?: number, max?: number) => {
-    const raw = feeOverrideDrafts[stepKey];
-    const cleaned = String(raw ?? '').trim();
-    if (!cleaned) {
-      setFeeOverrides((prev) => {
-        const next = { ...prev };
-        delete next[stepKey];
-        return next;
-      });
-      return;
-    }
-
-    const value = Number(cleaned.replace(/[^\d.]/g, ''));
-    if (!Number.isFinite(value) || value < 0) return;
-
-    const clamped = clampNumber(value, min, max);
-    setFeeOverrides((prev) => ({ ...prev, [stepKey]: clamped }));
-    setFeeOverrideDrafts((prev) => ({ ...prev, [stepKey]: String(clamped) }));
   };
 
   const selectedWorkflowSteps = useMemo(() => {
@@ -420,8 +502,7 @@ export default function CreateCase() {
       const isFeeRange =
         feeType === 'range' || (typeof feeMin === 'number' && typeof feeMax === 'number' && feeMax > feeMin);
 
-      const overrideAmount = typeof feeOverrides[s.key] === 'number' ? feeOverrides[s.key] : undefined;
-      const feeAmount = overrideAmount ?? (typeof feeMin === 'number' ? feeMin : undefined);
+      const feeAmount = typeof feeMin === 'number' ? feeMin : undefined;
       const feeCurrency = s?.fee?.currency || 'RWF';
       const slaLabel = typeof s?.sla?.max === 'number' && s?.sla?.unit ? `${s.sla.max} ${s.sla.unit}` : s?.sla?.text || '—';
 
@@ -449,13 +530,11 @@ export default function CreateCase() {
       const curr = derived[i];
       const currHasAmount = typeof curr.feeAmount === 'number' && curr.feeAmount > 0;
       const currIsRange = Boolean(curr.isFeeRange);
-      const currWasOverridden = typeof feeOverrides[curr.key] === 'number';
-      if (currHasAmount || currIsRange || currWasOverridden) continue;
+      if (currHasAmount || currIsRange) continue;
 
-      const prevWasOverridden = typeof feeOverrides[prev.key] === 'number';
       const prevIsRange = Boolean(prev.isFeeRange);
       const prevAmount = typeof prev.feeAmount === 'number' ? prev.feeAmount : undefined;
-      if (prevWasOverridden || prevIsRange) continue;
+      if (prevIsRange) continue;
       if (typeof prevAmount !== 'number' || prevAmount <= 0) continue;
 
       const half = prevAmount / 2;
@@ -464,7 +543,7 @@ export default function CreateCase() {
     }
 
     return derived;
-  }, [selectedWorkflowTemplate, formData.workflowStartDate, feeOverrides]);
+  }, [selectedWorkflowTemplate, formData.workflowStartDate]);
 
   const workflowSummary = useMemo(() => {
     if (selectedWorkflowSteps.length === 0) return null;
@@ -665,12 +744,12 @@ export default function CreateCase() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Case Description</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Case Summary</label>
               <textarea
                 value={formData.description}
                 onChange={(e) => handleInputChange('description', e.target.value)}
                 rows={4}
-                placeholder="Brief description of the case..."
+                placeholder="Brief summary of the case..."
                 className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
               />
             </div>
@@ -710,6 +789,42 @@ export default function CreateCase() {
               </div>
             </div>
 
+            <div className="rounded-lg border border-gray-200 bg-white p-4">
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Planned value / negotiated price *
+                  </label>
+                  <input
+                    value={plannedValueDraft}
+                    onChange={(e) => setPlannedValueDraft(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="e.g., 790000"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    This is the agreed case value. Earned fees update from checked key actions.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:w-80">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-gray-500">Progress</div>
+                    <div className="mt-2 text-lg font-semibold text-gray-900">{workflowActionTotals.percent}%</div>
+                    <div className="text-xs text-gray-500">
+                      {workflowActionTotals.checked}/{workflowActionTotals.total} actions
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-gray-500">Earned</div>
+                    <div className="mt-2 text-lg font-semibold text-gray-900">
+                      {formatCurrency(earnedValueAmount, workflowSummary?.currency || 'RWF')}
+                    </div>
+                    <div className="text-xs text-gray-500">Auto-calculated</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {selectedWorkflowTemplate ? (
               <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/30">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
@@ -737,7 +852,9 @@ export default function CreateCase() {
                     <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
                       <div className="text-xs uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">Planned value</div>
                       <div className="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {workflowSummary ? formatCurrency(workflowSummary.totalFee, workflowSummary.currency) : 'RWF 0'}
+                        {plannedValueAmount > 0
+                          ? formatCurrency(plannedValueAmount, workflowSummary?.currency || 'RWF')
+                          : 'Enter value'}
                       </div>
                     </div>
                   </div>
@@ -811,9 +928,23 @@ export default function CreateCase() {
                                               key={idx}
                                               className="flex items-start gap-2 rounded-lg border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200"
                                             >
-                                              <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                                              <button
+                                                type="button"
+                                                onClick={() => togglePreviewAction(step.key, idx)}
+                                                disabled={!checkedActions[step.key]?.[idx] && !canCheckPreviewAction(step.key, idx)}
+                                                className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                                                  checkedActions[step.key]?.[idx]
+                                                    ? 'border-green-600 bg-green-600 text-white'
+                                                    : 'border-gray-300 bg-white text-transparent'
+                                                } disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100`}
+                                                title={
+                                                  !checkedActions[step.key]?.[idx] && !canCheckPreviewAction(step.key, idx)
+                                                    ? 'Complete the previous key action first'
+                                                    : 'Toggle key action'
+                                                }
+                                              >
                                                 <Check className="h-3.5 w-3.5" />
-                                              </span>
+                                              </button>
                                               <span className="leading-5">{action}</span>
                                             </li>
                                           ))}
@@ -855,38 +986,11 @@ export default function CreateCase() {
                                       </div>
 
                                       {step.isFeeRange ? (
-                                        <div className="mt-2">
-                                          <div className="text-xs text-gray-500 dark:text-gray-400">
-                                            Range:{' '}
-                                            {typeof step.feeMin === 'number' && typeof step.feeMax === 'number'
-                                              ? `${step.feeCurrency || 'RWF'} ${step.feeMin.toLocaleString()} – ${step.feeMax.toLocaleString()}`
-                                              : '—'}
-                                          </div>
-                                          <div className="mt-2 flex items-center gap-2">
-                                            <input
-                                              value={
-                                                feeOverrideDrafts[step.key] ??
-                                                (typeof feeOverrides[step.key] === 'number' ? String(feeOverrides[step.key]) : '')
-                                              }
-                                              onChange={(e) =>
-                                                setFeeOverrideDrafts((prev) => ({ ...prev, [step.key]: e.target.value }))
-                                              }
-                                              onBlur={() => applyFeeOverride(step.key, step.feeMin, step.feeMax)}
-                                              inputMode="decimal"
-                                              placeholder="Enter amount"
-                                              className="w-32 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                                            />
-                                            <button
-                                              type="button"
-                                              onClick={() => applyFeeOverride(step.key, step.feeMin, step.feeMax)}
-                                              className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
-                                            >
-                                              Apply
-                                            </button>
-                                          </div>
-                                          <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                                            Leave blank to use the default amount.
-                                          </div>
+                                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                          Range:{' '}
+                                          {typeof step.feeMin === 'number' && typeof step.feeMax === 'number'
+                                            ? `${step.feeCurrency || 'RWF'} ${step.feeMin.toLocaleString()} - ${step.feeMax.toLocaleString()}`
+                                            : step.feeText || '—'}
                                         </div>
                                       ) : null}
                                     </div>
@@ -910,86 +1014,6 @@ export default function CreateCase() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-gray-200 bg-white p-4">
-              <div className="text-sm font-semibold text-gray-900 mb-3">Billing setup</div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment mode</label>
-                  <select
-                    value={formData.billingSettings?.paymentMode || 'postpaid'}
-                    onChange={(e) => {
-                      const paymentMode = e.target.value === 'prepaid' ? 'prepaid' : 'postpaid';
-                      setFormData((prev) => {
-                        const currency = prev.billingSettings?.currency || 'RWF';
-                        const prepaidTotal = Number(prev.billingSettings?.prepaidTotal) || 0;
-                        return {
-                          ...prev,
-                          billingSettings: {
-                            ...(prev.billingSettings || {}),
-                            paymentMode,
-                            currency,
-                            prepaidTotal: paymentMode === 'prepaid' ? prepaidTotal : 0,
-                            prepaidRemaining: paymentMode === 'prepaid' ? prepaidTotal : 0,
-                            accruedUnbilled: 0,
-                          },
-                        };
-                      });
-                    }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900"
-                  >
-                    <option value="postpaid">Pay after recovery</option>
-                    <option value="prepaid">Client pays first (prepaid)</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Prepaid will decrement as checklist items are completed. Pay after recovery will accrue unbilled fees.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
-                  <input
-                    value={formData.billingSettings?.currency || 'RWF'}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        billingSettings: {
-                          ...(prev.billingSettings || {}),
-                          currency: e.target.value.toUpperCase(),
-                        },
-                      }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900"
-                    placeholder="RWF"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Prepaid amount</label>
-                  <input
-                    value={String(formData.billingSettings?.prepaidTotal ?? '')}
-                    onChange={(e) => {
-                      const value = Number(String(e.target.value).replace(/[^\d.]/g, ''));
-                      setFormData((prev) => {
-                        const paymentMode = prev.billingSettings?.paymentMode || 'postpaid';
-                        const prepaidTotal = Number.isFinite(value) && value > 0 ? value : 0;
-                        return {
-                          ...prev,
-                          billingSettings: {
-                            ...(prev.billingSettings || {}),
-                            prepaidTotal,
-                            prepaidRemaining: paymentMode === 'prepaid' ? prepaidTotal : 0,
-                          },
-                        };
-                      });
-                    }}
-                    disabled={(formData.billingSettings?.paymentMode || 'postpaid') !== 'prepaid'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 disabled:opacity-60"
-                    placeholder="0"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">Only used for prepaid clients.</p>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -1009,14 +1033,9 @@ export default function CreateCase() {
                   ['Workflow Start Date', formData.workflowStartDate || 'Not set'],
                   ['Next expected deadline', workflowSummary?.nextDueAt ? workflowSummary.nextDueAt.toLocaleDateString() : 'TBD'],
                   ['Estimated completion', workflowSummary?.completionDate ? workflowSummary.completionDate.toLocaleDateString() : 'TBD'],
-                  ['Planned workflow value', workflowSummary ? formatCurrency(workflowSummary.totalFee, workflowSummary.currency) : 'RWF 0'],
-                  ['Payment mode', formData.billingSettings?.paymentMode === 'prepaid' ? 'Prepaid' : 'Pay after recovery'],
-                  [
-                    'Prepaid amount',
-                    formData.billingSettings?.paymentMode === 'prepaid'
-                      ? formatCurrency(Number(formData.billingSettings?.prepaidTotal) || 0, formData.billingSettings?.currency || 'RWF')
-                      : '—',
-                  ],
+                  ['Planned value', formatCurrency(plannedValueAmount, workflowSummary?.currency || 'RWF')],
+                  ['Key action progress', `${workflowActionTotals.percent}% (${workflowActionTotals.checked}/${workflowActionTotals.total})`],
+                  ['Earned fees', formatCurrency(earnedValueAmount, workflowSummary?.currency || 'RWF')],
                 ].map(([k, v]) => (
                   <div key={k} className="grid grid-cols-3 gap-4 py-3 border-b border-gray-200">
                     <span className="text-sm text-gray-600">{k}:</span>
@@ -1026,7 +1045,7 @@ export default function CreateCase() {
 
                 {formData.description && (
                   <div className="py-3">
-                    <span className="text-sm text-gray-600 block mb-2">Description:</span>
+                    <span className="text-sm text-gray-600 block mb-2">Case Summary:</span>
                     <p className="text-sm text-gray-900">{formData.description}</p>
                   </div>
                 )}
@@ -1049,6 +1068,15 @@ export default function CreateCase() {
         </button>
 
         <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={handleSaveDraft}
+            className="inline-flex items-center px-4 py-2 border border-gray-800 text-gray-800 rounded hover:bg-gray-100 transition-colors"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            Save Draft
+          </button>
+
           <button
             onClick={() => navigate('/cases')}
             className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition-colors"

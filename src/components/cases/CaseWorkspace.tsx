@@ -102,6 +102,30 @@ const parseBudgetToNumber = (budget: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+const getPlannedAmount = (caseData?: CaseData | null) =>
+  typeof caseData?.workflowProgress?.plannedValue?.amount === 'number'
+    ? caseData.workflowProgress.plannedValue.amount
+    : parseBudgetToNumber(caseData?.budget);
+
+const getPlannedCurrency = (caseData?: CaseData | null) =>
+  caseData?.workflowProgress?.plannedValue?.currency || caseData?.billingSettings?.currency || 'RWF';
+
+const calculateWorkflowActionProgress = (wf: WorkflowInstance | null, plannedAmount: number, currency: string) => {
+  const actions = (wf?.steps || []).flatMap((step) => step.actions || []);
+  const checked = actions.filter((action) => Boolean(action.done)).length;
+  const total = actions.length;
+  const percent = total > 0 ? Math.round((checked / total) * 100) : 0;
+  return {
+    checked,
+    total,
+    percent,
+    completedValue: {
+      amount: Math.round((plannedAmount * percent) / 100),
+      currency,
+    },
+  };
+};
+
 const getInvoiceStatusChip = (status: Invoice['status']) => {
   return status === 'Paid' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700';
 };
@@ -901,18 +925,47 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
     }
   };
 
-  const totalBilled = useMemo(() => parseBudgetToNumber(caseData?.budget), [caseData?.budget]);
+  const totalBilled = useMemo(() => getPlannedAmount(caseData), [caseData]);
   const totalPaid = useMemo(
     () => invoices.filter((i) => i.status === 'Paid').reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
     [invoices]
   );
   const outstanding = useMemo(() => Math.max(0, totalBilled - totalPaid), [totalBilled, totalPaid]);
-
-  const paymentMode = (caseData?.billingSettings?.paymentMode || 'postpaid') as 'prepaid' | 'postpaid';
-  const billingCurrency = caseData?.billingSettings?.currency || 'RWF';
-  const prepaidRemaining = Number(caseData?.billingSettings?.prepaidRemaining) || 0;
-  const prepaidTotal = Number(caseData?.billingSettings?.prepaidTotal) || 0;
-  const accruedUnbilled = Number(caseData?.billingSettings?.accruedUnbilled) || 0;
+  const billingCurrency = getPlannedCurrency(caseData);
+  const earnedFeeAmount =
+    typeof caseData?.workflowProgress?.completedValue?.amount === 'number'
+      ? caseData.workflowProgress.completedValue.amount
+      : Number(caseData?.billingSettings?.accruedUnbilled) || 0;
+  const workflowPercent = Number(caseData?.workflowProgress?.percent) || 0;
+  const caseExpenseTotal = useMemo(
+    () => caseExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0),
+    [caseExpenses]
+  );
+  const plannedRemainingAfterExpenses = totalBilled - caseExpenseTotal;
+  const plannedExpenseRatio = totalBilled > 0 ? Math.round((caseExpenseTotal / totalBilled) * 100) : 0;
+  const marginAmount = earnedFeeAmount - caseExpenseTotal;
+  const billingHealth =
+    totalBilled > 0 && caseExpenseTotal > totalBilled
+      ? 'loss'
+      : totalBilled > 0 && plannedExpenseRatio >= 85
+        ? 'red'
+        : totalBilled > 0 && plannedExpenseRatio >= 65
+          ? 'yellow'
+          : 'green';
+  const billingHealthClass =
+    billingHealth === 'loss' || billingHealth === 'red'
+      ? 'bg-red-600'
+      : billingHealth === 'yellow'
+        ? 'bg-yellow-500'
+        : 'bg-green-600';
+  const billingHealthText =
+    billingHealth === 'loss'
+      ? 'Loss risk'
+      : billingHealth === 'red'
+        ? 'Low remaining value'
+        : billingHealth === 'yellow'
+          ? 'Watch spend'
+          : 'Healthy';
 
   const handleDeleteInvoice = async (invoiceId: string) => {
     if (!window.confirm('Are you sure you want to delete this invoice?')) return;
@@ -1058,14 +1111,14 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
   // Helper function to get urgency color based on percentage remaining
   const getUrgencyColor = (percentageRemaining: number): string => {
     if (percentageRemaining > 50) return 'bg-green-100 border-green-500';
-    if (percentageRemaining > 25) return 'bg-orange-100 border-orange-500';
+    if (percentageRemaining > 25) return 'bg-yellow-100 border-yellow-500';
     return 'bg-red-100 border-red-500';
   };
 
   // Helper function to get urgency text color based on percentage remaining
   const getUrgencyTextColor = (percentageRemaining: number): string => {
     if (percentageRemaining > 50) return 'text-green-700';
-    if (percentageRemaining > 25) return 'text-orange-700';
+    if (percentageRemaining > 25) return 'text-yellow-700';
     return 'text-red-700';
   };
 
@@ -1199,7 +1252,21 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 gap-6">
           <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Workflow Checklist</h2>
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="font-semibold text-gray-900">Workflow Checklist</h2>
+                <p className="text-sm text-gray-500 mt-1">Progress is based on checked key actions.</p>
+              </div>
+              <div className="min-w-52 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                  <span>Progress</span>
+                  <span>{workflowPercent}%</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-gray-200">
+                  <div className="h-2 rounded-full bg-gray-900" style={{ width: `${Math.min(100, Math.max(0, workflowPercent))}%` }} />
+                </div>
+              </div>
+            </div>
             {caseData?._id ? (
               <CaseWorkflowTab
                 caseId={caseData._id}
@@ -1207,18 +1274,42 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                 canUpload={true}
                 onWorkflowChanged={async () => {
                   if (!caseData._id) return;
+                  let latestCase: CaseData | null = null;
+                  let latestWf: WorkflowInstance | null = null;
                   try {
-                    const updatedCase = await getCaseById(caseData._id);
-                    setCaseData(updatedCase);
+                    latestCase = await getCaseById(caseData._id);
                   } catch {
                     // ignore
                   }
                   try {
-                    const updatedWf = await getWorkflowForCase(caseData._id);
-                    setWorkflowInstance(updatedWf);
+                    latestWf = await getWorkflowForCase(caseData._id);
                   } catch {
                     // ignore
                   }
+                  if (latestCase && latestWf) {
+                    const plannedAmount = getPlannedAmount(latestCase);
+                    const currency = getPlannedCurrency(latestCase);
+                    const progress = calculateWorkflowActionProgress(latestWf, plannedAmount, currency);
+                    const syncedCase = await updateCase(caseData._id, {
+                      workflowProgress: {
+                        ...(latestCase.workflowProgress || {}),
+                        percent: progress.percent,
+                        plannedValue: { amount: plannedAmount, currency },
+                        completedValue: progress.completedValue,
+                      },
+                      billingSettings: {
+                        ...(latestCase.billingSettings || {}),
+                        currency,
+                        prepaidTotal: 0,
+                        prepaidRemaining: 0,
+                        accruedUnbilled: progress.completedValue.amount,
+                      },
+                    });
+                    setCaseData(syncedCase);
+                  } else if (latestCase) {
+                    setCaseData(latestCase);
+                  }
+                  if (latestWf) setWorkflowInstance(latestWf);
                 }}
               />
             ) : (
@@ -1280,7 +1371,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-6 lg:col-span-2">
-            <h2 className="font-semibold text-gray-900 mb-3">Case Description</h2>
+            <h2 className="font-semibold text-gray-900 mb-3">Case Summary</h2>
             <p className="text-sm text-gray-600 whitespace-pre-line">{caseData.description}</p>
           </div>
         </div>
@@ -2208,47 +2299,66 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
       {/* Billing */}
       {activeTab === 'billing' && (
         <div className="space-y-6">
-          {/* Workflow-driven billing mode */}
           <div className="bg-white border border-gray-200 rounded-xl p-6">
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Billing mode</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Case Billing Value</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  Set per-case. Workflow step fees automatically debit prepaid balances or accrue for pay-after-recovery clients when steps are completed.
+                  Billing is based on the negotiated planned value and the percentage of completed key actions.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span
-                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                    paymentMode === 'prepaid' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}
-                >
-                  {paymentMode === 'prepaid' ? 'Prepaid' : 'Pay after recovery'}
+              <div className="flex items-center gap-3">
+                <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-white ${billingHealthClass}`}>
+                  {billingHealthText}
                 </span>
               </div>
             </div>
 
-            <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="mt-5">
+              <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                <span>Planned value used by case expenses</span>
+                <span>{plannedExpenseRatio}%</span>
+              </div>
+              <div className="h-3 overflow-hidden rounded-full bg-gray-200">
+                <div
+                  className={`h-3 rounded-full ${billingHealthClass}`}
+                  style={{ width: `${Math.min(100, Math.max(0, plannedExpenseRatio))}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Prepaid total</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Planned value</div>
                 <div className="mt-2 text-lg font-semibold text-gray-900">
-                  {billingCurrency} {Math.round(prepaidTotal).toLocaleString()}
+                  {billingCurrency} {Math.round(totalBilled).toLocaleString()}
                 </div>
               </div>
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Prepaid remaining</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Earned / cleared fees</div>
                 <div className="mt-2 text-lg font-semibold text-gray-900">
-                  {billingCurrency} {Math.round(prepaidRemaining).toLocaleString()}
+                  {billingCurrency} {Math.round(earnedFeeAmount).toLocaleString()}
                 </div>
-                <div className="mt-2 text-xs text-gray-500">Auto-updated on checklist completion.</div>
+                <div className="mt-2 text-xs text-gray-500">Auto-updated from checked key actions.</div>
               </div>
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Accrued (unbilled)</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Case expenses</div>
                 <div className="mt-2 text-lg font-semibold text-gray-900">
-                  {billingCurrency} {Math.round(accruedUnbilled).toLocaleString()}
+                  {billingCurrency} {Math.round(caseExpenseTotal).toLocaleString()}
                 </div>
-                <div className="mt-2 text-xs text-gray-500">For pay-after-recovery clients only.</div>
+                <div className="mt-2 text-xs text-gray-500">Petty cash linked to this case.</div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-gray-500">
+                  {marginAmount >= 0 ? 'Profit margin' : 'Loss'}
+                </div>
+                <div className={`mt-2 text-lg font-semibold ${marginAmount >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                  {billingCurrency} {Math.abs(Math.round(marginAmount)).toLocaleString()}
+                </div>
+                <div className="mt-2 text-xs text-gray-500">
+                  Earned fees minus case expenses.
+                </div>
               </div>
             </div>
           </div>
@@ -2256,7 +2366,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
           {/* Summary */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white border border-gray-200 rounded-xl p-6">
-              <span className="text-gray-500 text-sm mb-2 block">Total Billed (Budget)</span>
+              <span className="text-gray-500 text-sm mb-2 block">Planned Value</span>
               <span className="text-3xl font-bold text-gray-900">{formatRwf(totalBilled)}</span>
             </div>
             <div className="bg-white border border-gray-200 rounded-xl p-6">
@@ -2349,17 +2459,17 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                             rel="noopener noreferrer"
                             className="text-blue-600 underline text-xs font-medium"
                           >
-                            View Proof
+                            View Receipt
                           </a>
                         ) : (
-                          <span className="text-xs text-gray-400">No proof</span>
+                          <span className="text-xs text-gray-400">No receipt</span>
                         )
                       ) : (
                         <button
                           className="px-3 py-1 rounded bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200"
                           onClick={() => openUploadProofModal(inv._id!)}
                         >
-                          Upload Proof
+                          Upload Receipt
                         </button>
                       )}
 
@@ -2533,7 +2643,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
           {showUploadProofModal && (
             <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-lg max-w-md w-full p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Proof of Payment</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Receipt / Proof of Payment</h3>
 
                 <form onSubmit={handleUploadProof} className="space-y-4">
                   <input
@@ -2560,7 +2670,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                       disabled={uploadingProof}
                       className="flex-1 px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-60"
                     >
-                      {uploadingProof ? 'Uploading...' : 'Upload'}
+                      {uploadingProof ? 'Uploading...' : 'Upload Receipt'}
                     </button>
                   </div>
                 </form>
@@ -2717,10 +2827,33 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Budget (RWF)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Planned value (RWF)</label>
                 <input
-                  value={String(editCaseData.budget ?? '')}
-                  onChange={(e) => setEditCaseData((c) => (c ? { ...c, budget: e.target.value } : c))}
+                  value={String(editCaseData.workflowProgress?.plannedValue?.amount ?? editCaseData.budget ?? '')}
+                  onChange={(e) => {
+                    const amount = Number(String(e.target.value).replace(/[^\d.]/g, ''));
+                    setEditCaseData((c) =>
+                      c
+                        ? {
+                            ...c,
+                            budget: e.target.value,
+                            workflowProgress: {
+                              ...(c.workflowProgress || {}),
+                              plannedValue: {
+                                amount: Number.isFinite(amount) ? amount : 0,
+                                currency: c.workflowProgress?.plannedValue?.currency || c.billingSettings?.currency || 'RWF',
+                              },
+                            },
+                            billingSettings: {
+                              ...(c.billingSettings || {}),
+                              currency: c.workflowProgress?.plannedValue?.currency || c.billingSettings?.currency || 'RWF',
+                              prepaidTotal: 0,
+                              prepaidRemaining: 0,
+                            },
+                          }
+                        : c
+                    );
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                   placeholder="1000000"
                 />
@@ -2789,88 +2922,8 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
                 </div>
               </div>
 
-              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                <div className="text-sm font-semibold text-gray-900">Billing settings</div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment mode</label>
-                    <select
-                      value={editCaseData.billingSettings?.paymentMode || 'postpaid'}
-                      onChange={(e) => {
-                        const paymentMode = e.target.value === 'prepaid' ? 'prepaid' : 'postpaid';
-                        setEditCaseData((c) => {
-                          if (!c) return c;
-                          const currency = c.billingSettings?.currency || 'RWF';
-                          const prepaidTotal = Number(c.billingSettings?.prepaidTotal) || 0;
-                          return {
-                            ...c,
-                            billingSettings: {
-                              ...(c.billingSettings || {}),
-                              paymentMode,
-                              currency,
-                              prepaidTotal: paymentMode === 'prepaid' ? prepaidTotal : 0,
-                              prepaidRemaining: paymentMode === 'prepaid' ? prepaidTotal : 0,
-                              accruedUnbilled: 0,
-                            },
-                          };
-                        });
-                      }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
-                    >
-                      <option value="postpaid">Pay after recovery</option>
-                      <option value="prepaid">Prepaid</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
-                    <input
-                      value={editCaseData.billingSettings?.currency || 'RWF'}
-                      onChange={(e) =>
-                        setEditCaseData((c) =>
-                          c
-                            ? {
-                                ...c,
-                                billingSettings: { ...(c.billingSettings || {}), currency: e.target.value.toUpperCase() },
-                              }
-                            : c
-                        )
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white"
-                      placeholder="RWF"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Prepaid amount</label>
-                    <input
-                      value={String(editCaseData.billingSettings?.prepaidTotal ?? '')}
-                      onChange={(e) => {
-                        const value = Number(String(e.target.value).replace(/[^\d.]/g, ''));
-                        setEditCaseData((c) => {
-                          if (!c) return c;
-                          const paymentMode = c.billingSettings?.paymentMode || 'postpaid';
-                          const prepaidTotal = Number.isFinite(value) && value > 0 ? value : 0;
-                          return {
-                            ...c,
-                            billingSettings: {
-                              ...(c.billingSettings || {}),
-                              prepaidTotal,
-                              prepaidRemaining: paymentMode === 'prepaid' ? prepaidTotal : 0,
-                            },
-                          };
-                        });
-                      }}
-                      disabled={(editCaseData.billingSettings?.paymentMode || 'postpaid') !== 'prepaid'}
-                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white disabled:opacity-60"
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-              </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Case Summary</label>
                 <textarea
                   value={editCaseData.description}
                   onChange={(e) => setEditCaseData((c) => (c ? { ...c, description: e.target.value } : c))}

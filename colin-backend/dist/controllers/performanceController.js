@@ -89,6 +89,21 @@ async function computeUserPerformance(req, userName, from, to) {
         const compISO = comp.toISOString().slice(0, 10);
         return compISO <= String(t.dueDate);
     }).length;
+    const deadlineBreakdown = completed.reduce((acc, t) => {
+        const comp = t.completedAt ? new Date(t.completedAt) : null;
+        const due = new Date(`${t.dueDate}T23:59:59.999`);
+        if (!comp || !Number.isFinite(due.getTime()))
+            return acc;
+        const diffHours = (due.getTime() - comp.getTime()) / (1000 * 60 * 60);
+        if (diffHours >= 24)
+            acc.early += 1;
+        else if (diffHours >= 0)
+            acc.onTime += 1;
+        else
+            acc.late += 1;
+        return acc;
+    }, { early: 0, onTime: 0, late: 0 });
+    const overdueCount = inRangeTasks.filter((t) => t.status !== 'Completed' && String(t.dueDate) < isoToday()).length;
     const onTimePct = completed.length ? Math.round((onTimeCount / completed.length) * 100) : 0;
     const billableHours = logs.reduce((s, l) => s + (Number(l.hours) || 0), 0);
     // Monthly aggregates (by dueDate month)
@@ -137,6 +152,10 @@ async function computeUserPerformance(req, userName, from, to) {
         tasksTotal: inRangeTasks.length,
         billableHours: Math.round(billableHours * 10) / 10,
         onTimeCompletionPct: clamp(onTimePct, 0, 100),
+        deadlineBreakdown: {
+            ...deadlineBreakdown,
+            overdue: overdueCount,
+        },
         approvals: {
             pending: pending.length,
             approved: approved.length,

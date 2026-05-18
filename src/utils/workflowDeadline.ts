@@ -1,4 +1,4 @@
-export type UrgencyColor = 'green' | 'orange' | 'red' | 'gray';
+export type UrgencyColor = 'green' | 'yellow' | 'red' | 'gray';
 
 export const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
@@ -19,14 +19,14 @@ export const getDueRemainingRatio = (startAt?: Date | string, dueAt?: Date | str
 export const getUrgencyColorFromRatio = (ratio: number | undefined): UrgencyColor => {
   if (ratio === undefined) return 'gray';
   if (ratio > 0.5) return 'green';
-  if (ratio > 0.25) return 'orange';
+  if (ratio > 0.25) return 'yellow';
   return 'red';
 };
 
 export const getUrgencyClass = (color: UrgencyColor) => {
   // Solid pills with white text for consistent emphasis
   if (color === 'green') return 'bg-green-600 text-white border-green-700';
-  if (color === 'orange') return 'bg-orange-500 text-white border-orange-600';
+  if (color === 'yellow') return 'bg-yellow-500 text-white border-yellow-600';
   if (color === 'red') return 'bg-red-600 text-white border-red-700';
   return 'bg-gray-500 text-white border-gray-600';
 };

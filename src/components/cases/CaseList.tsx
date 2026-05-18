@@ -53,7 +53,10 @@ export default function CaseList({ userRole }: CaseListProps) {
   };
 
   const getDeadlinePillClass = (c: CaseData) => {
-    const ratio = getDueRemainingRatio(c.workflowProgress?.currentStepStartAt, c.workflowProgress?.currentStepDueAt);
+    const ratio = getDueRemainingRatio(
+      c.workflowProgress?.currentStepStartAt || c.workflowStartDate || c.createdAt,
+      c.workflowProgress?.currentStepDueAt || c.workflowProgress?.nextDueAt
+    );
     return getUrgencyClass(getUrgencyColorFromRatio(ratio));
   };
 
@@ -67,10 +70,13 @@ export default function CaseList({ userRole }: CaseListProps) {
     };
 
     const urgencyRank = (c: CaseData) => {
-      const ratio = getDueRemainingRatio(c.workflowProgress?.currentStepStartAt, c.workflowProgress?.currentStepDueAt);
+      const ratio = getDueRemainingRatio(
+        c.workflowProgress?.currentStepStartAt || c.workflowStartDate || c.createdAt,
+        c.workflowProgress?.currentStepDueAt || c.workflowProgress?.nextDueAt
+      );
       const color = getUrgencyColorFromRatio(ratio);
       if (color === 'red') return 0;
-      if (color === 'orange') return 1;
+      if (color === 'yellow') return 1;
       if (color === 'green') return 2;
       return 3;
     };

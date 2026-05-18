@@ -8,6 +8,7 @@ export interface CaseEvent {
   date: string;
   time: string;
   description?: string;
+  automated?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
