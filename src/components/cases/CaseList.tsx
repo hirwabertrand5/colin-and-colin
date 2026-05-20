@@ -4,7 +4,14 @@ import { Plus, Search, Briefcase, ArrowUpDown } from 'lucide-react';
 import { UserRole } from '../../App';
 import { getAllCases, CaseData } from '../../services/caseService';
 import usePageTitle from '../../hooks/usePageTitle';
-import { getDueRemainingRatio, getUrgencyClass, getUrgencyColorFromRatio, formatDueCountdown } from '../../utils/workflowDeadline';
+import {
+  getDueRemainingRatio,
+  getUrgencyClass,
+  getUrgencyColorForDueDate,
+  getUrgencyColorFromRatio,
+  formatDueCountdown,
+} from '../../utils/workflowDeadline';
+import { getCasePracticePath } from '../../utils/caseLabels';
 
 interface CaseListProps {
   userRole: UserRole;
@@ -53,11 +60,12 @@ export default function CaseList({ userRole }: CaseListProps) {
   };
 
   const getDeadlinePillClass = (c: CaseData) => {
-    const ratio = getDueRemainingRatio(
-      c.workflowProgress?.currentStepStartAt || c.workflowStartDate || c.createdAt,
-      c.workflowProgress?.currentStepDueAt || c.workflowProgress?.nextDueAt
+    return getUrgencyClass(
+      getUrgencyColorForDueDate(
+        c.workflowProgress?.currentStepDueAt || c.workflowProgress?.nextDueAt,
+        c.workflowProgress?.currentStepStartAt || c.workflowStartDate || c.createdAt
+      )
     );
-    return getUrgencyClass(getUrgencyColorFromRatio(ratio));
   };
 
   const collator = useMemo(() => new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }), []);
@@ -93,7 +101,7 @@ export default function CaseList({ userRole }: CaseListProps) {
       originalIndex,
       searchable: `${c.caseNo ?? ''} ${c.parties ?? ''}`.toLowerCase(),
       createdAtMs: toMs(c.createdAt),
-      workflowLabel: String(c.workflow ?? c.matterType ?? '').toLowerCase(),
+      workflowLabel: getCasePracticePath(c).toLowerCase(),
       currentStepLabel: String(c.workflowProgress?.currentStepTitle || '').toLowerCase(),
       deadlineRank: urgencyRank(c),
       nextDueAtMs: nextDueAtMs(c),
@@ -246,7 +254,7 @@ export default function CaseList({ userRole }: CaseListProps) {
                   'No.',
                   'Case No.',
                   'Parties',
-                  'Case Type',
+                  'Practice Path',
                   'Workflow',
                   'Current Step',
                   'Assigned To',
@@ -274,7 +282,10 @@ export default function CaseList({ userRole }: CaseListProps) {
                   </td>
                   <td className="px-6 py-5 text-sm font-medium text-gray-900">{item.caseNo}</td>
                   <td className="px-6 py-5 text-sm text-gray-900">{item.parties}</td>
-                  <td className="px-6 py-5 text-sm text-gray-600">{item.caseType}</td>
+                  <td className="px-6 py-5 text-sm text-gray-700">
+                    <div className="max-w-[280px] font-medium text-gray-900">{getCasePracticePath(item)}</div>
+                    <div className="mt-1 text-xs text-gray-500">{item.workflow || item.matterType || item.caseType}</div>
+                  </td>
                   <td className="px-6 py-5 text-sm text-gray-700">{item.workflow || item.matterType || '—'}</td>
 
                   <td className="px-6 py-5 text-sm text-gray-700">

@@ -19,9 +19,11 @@ import {
   createPettyCashFund,
   deleteExpense,
   getActivePettyCashFund,
+  listPettyCashFunds,
   listExpensesForFund,
   PettyCashExpense,
   PettyCashFund,
+  topUpActivePettyCashFund,
 } from '../../services/pettyCashService';
 import { CaseData, getAllCases } from '../../services/caseService';
 
@@ -32,6 +34,7 @@ const formatRwf = (n: number) => `RWF ${Math.round(n).toLocaleString('en-US')}`;
 
 export default function PettyCashDashboard() {
   const [fund, setFund] = useState<PettyCashFund | null>(null);
+  const [fundHistory, setFundHistory] = useState<PettyCashFund[]>([]);
   const [expenses, setExpenses] = useState<PettyCashExpense[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,6 +43,8 @@ export default function PettyCashDashboard() {
   // Create fund modal
   const [showCreateFund, setShowCreateFund] = useState(false);
   const [fundForm, setFundForm] = useState({ name: '', description: '', initialAmount: '' });
+  const [showTopUpFund, setShowTopUpFund] = useState(false);
+  const [topUpForm, setTopUpForm] = useState({ amount: '', note: '' });
 
   // Add expense modal
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -101,9 +106,14 @@ export default function PettyCashDashboard() {
     try {
       setLoading(true);
       setError('');
-      const [active, allCases] = await Promise.all([getActivePettyCashFund(), getAllCases().catch(() => [])]);
+      const [active, allCases, funds] = await Promise.all([
+        getActivePettyCashFund(),
+        getAllCases().catch(() => []),
+        listPettyCashFunds().catch(() => []),
+      ]);
       setFund(active);
       setCases(allCases);
+      setFundHistory(funds);
 
       if (active?._id) {
         const ex = await listExpensesForFund(active._id);
@@ -190,6 +200,25 @@ export default function PettyCashDashboard() {
       await load();
     } catch (e: any) {
       setError(e.message || 'Failed to add expense');
+    }
+  };
+
+  const handleTopUpFund = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fund?._id) return;
+    try {
+      setError('');
+      const amount = Number(String(topUpForm.amount).replace(/[^\d.]/g, ''));
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setError('Provide a valid top-up amount.');
+        return;
+      }
+      await topUpActivePettyCashFund({ amount, note: topUpForm.note.trim() || undefined });
+      setShowTopUpFund(false);
+      setTopUpForm({ amount: '', note: '' });
+      await load();
+    } catch (e: any) {
+      setError(e.message || 'Failed to top up fund');
     }
   };
 
@@ -340,6 +369,14 @@ export default function PettyCashDashboard() {
                 </button>
 
                 <button
+                  onClick={() => setShowTopUpFund(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                >
+                  <Plus className="w-4 h-4" />
+                  Top Up
+                </button>
+
+                <button
                   onClick={() => setShowAddRefund(true)}
                   className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
                 >
@@ -368,12 +405,37 @@ export default function PettyCashDashboard() {
       {loading ? (
         <div className="text-gray-500">Loading…</div>
       ) : !fund ? (
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <div className="flex items-center gap-3">
-            <Wallet className="w-6 h-6 text-gray-700" />
-            <div>
-              <div className="font-semibold text-gray-900">No active petty cash fund</div>
-              <div className="text-sm text-gray-500">Create a fund to start recording expenses.</div>
+        <div className="space-y-6">
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <div className="flex items-center gap-3">
+              <Wallet className="w-6 h-6 text-gray-700" />
+              <div>
+                <div className="font-semibold text-gray-900">No active petty cash fund</div>
+                <div className="text-sm text-gray-500">Create a fund to start recording expenses.</div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Closed Fund History</h2>
+              <span className="text-xs text-gray-500">{fundHistory.length} funds</span>
+            </div>
+            <div className="divide-y divide-gray-200">
+              {fundHistory.map((item) => (
+                <div key={item._id} className="px-5 py-4 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{item.name}</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Created {new Date(item.createdAt).toLocaleDateString()} by {item.createdByName}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-gray-900">{formatRwf(item.initialAmount)}</p>
+                    <p className="text-xs text-gray-500">{item.status}</p>
+                  </div>
+                </div>
+              ))}
+              {fundHistory.length === 0 ? <div className="px-5 py-8 text-sm text-gray-500">No fund history yet.</div> : null}
             </div>
           </div>
         </div>
@@ -439,6 +501,40 @@ export default function PettyCashDashboard() {
           </div>
 
           {/* Expenses panel */}
+          <div className="bg-white border border-gray-200 rounded-lg mb-6">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Fund History</h2>
+              <span className="text-xs text-gray-500">{fundHistory.length} funds</span>
+            </div>
+            <div className="divide-y divide-gray-200">
+              {fundHistory.slice(0, 8).map((item) => (
+                <div key={item._id} className="px-5 py-4 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          item.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {item.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Created {new Date(item.createdAt).toLocaleDateString()} by {item.createdByName}
+                      {item.topUps?.length ? ` • ${item.topUps.length} top-up${item.topUps.length === 1 ? '' : 's'}` : ''}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-semibold text-gray-900">{formatRwf(item.initialAmount)}</p>
+                    <p className="text-xs text-gray-500">Remaining {formatRwf(item.remainingAmount)}</p>
+                  </div>
+                </div>
+              ))}
+              {fundHistory.length === 0 ? <div className="px-5 py-8 text-sm text-gray-500">No fund history yet.</div> : null}
+            </div>
+          </div>
+
           <div className="bg-white border border-gray-200 rounded-lg">
             <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="font-semibold text-gray-900">
@@ -549,6 +645,58 @@ export default function PettyCashDashboard() {
             </div>
           </div>
         </>
+      )}
+
+      {showTopUpFund && fund && (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Top Up Petty Cash</h3>
+              <button onClick={() => setShowTopUpFund(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleTopUpFund} className="space-y-4">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                Current remaining: <span className="font-semibold text-gray-900">{formatRwf(fund.remainingAmount)}</span>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount to Add (RWF) *</label>
+                <input
+                  inputMode="numeric"
+                  value={topUpForm.amount}
+                  onChange={(e) => setTopUpForm((p) => ({ ...p, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                  placeholder="250000"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
+                <textarea
+                  value={topUpForm.note}
+                  onChange={(e) => setTopUpForm((p) => ({ ...p, note: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                  rows={2}
+                  placeholder="Reason or approval reference"
+                />
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowTopUpFund(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="flex-1 px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700">
+                  Add Money
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Create Fund Modal (kept simple, consistent) */}

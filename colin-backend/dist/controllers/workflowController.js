@@ -31,6 +31,10 @@ const computeNextDueAt = (inst) => {
         .sort((a, b) => (a.order || 0) - (b.order || 0))[0];
     return pending?.dueAt;
 };
+const previousActiveStatus = (status) => {
+    const normalized = String(status || '').trim().toLowerCase();
+    return normalized && normalized !== 'closed' ? status : 'In Progress';
+};
 const updateCaseWorkflowProgress = async (c, inst) => {
     const { plannedAmount, completedAmount, currency } = computeWorkflowMoney(inst);
     const nextDueAt = computeNextDueAt(inst);
@@ -69,6 +73,12 @@ const updateCaseWorkflowProgress = async (c, inst) => {
         plannedValue: { amount: existingPlannedAmount || undefined, currency: existingCurrency },
         completedValue: { amount: actionCompletedAmount || 0, currency: existingCurrency },
     };
+    if (inst.status === 'Completed') {
+        c.status = 'Closed';
+    }
+    else if (String(c.status || '').toLowerCase() === 'closed') {
+        c.status = previousActiveStatus(c.workflowProgress?.status);
+    }
     c.billingSettings = {
         ...(c.billingSettings || {}),
         currency: existingCurrency,

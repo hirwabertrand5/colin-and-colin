@@ -109,6 +109,51 @@ export const closeActiveFund = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const topUpActiveFund = async (req: AuthRequest, res: Response) => {
+  try {
+    const { amount, note } = req.body || {};
+    const num = Number(amount);
+    if (!Number.isFinite(num) || num <= 0) {
+      return res.status(400).json({ message: 'amount (>0) is required.' });
+    }
+
+    const fund: any = await PettyCashFund.findOne({ status: 'active' });
+    if (!fund) return res.status(404).json({ message: 'No active fund found.' });
+
+    const actor = actorFromReq(req);
+    fund.initialAmount = Number(fund.initialAmount || 0) + num;
+    fund.remainingAmount = Number(fund.remainingAmount || 0) + num;
+    fund.lowBalanceNotifiedAt = null;
+    fund.topUps = [
+      ...(Array.isArray(fund.topUps) ? fund.topUps : []),
+      {
+        amount: num,
+        note: note ? String(note).trim() : '',
+        addedByName: actor.actorName,
+        addedAt: new Date(),
+      },
+    ];
+    await fund.save();
+
+    await notifyRoles({
+      roles: ALLOWED_ROLES,
+      category: 'pettyCashLow',
+      notification: {
+        type: 'PETTY_CASH_CREATED',
+        title: 'Petty Cash Fund Topped Up',
+        message: `${actor.actorName} added RWF ${num.toLocaleString()} to ${fund.name}.`,
+        fundId: String(fund._id),
+        severity: 'info',
+        link: '/petty-cash',
+      },
+    });
+
+    res.json(fund);
+  } catch (e: any) {
+    res.status(500).json({ message: e?.message || 'Failed to top up fund.' });
+  }
+};
+
 // --------------------
 // Expenses
 // --------------------

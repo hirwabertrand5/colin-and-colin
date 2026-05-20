@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.addRefundToExpense = exports.deleteExpense = exports.createExpense = exports.listExpensesForCase = exports.listExpensesForFund = exports.closeActiveFund = exports.createFund = exports.listFunds = exports.getActiveFund = void 0;
+exports.addRefundToExpense = exports.deleteExpense = exports.createExpense = exports.listExpensesForCase = exports.listExpensesForFund = exports.topUpActiveFund = exports.closeActiveFund = exports.createFund = exports.listFunds = exports.getActiveFund = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const pettyCashFundModel_1 = __importDefault(require("../models/pettyCashFundModel"));
 const pettyCashExpenseModel_1 = __importDefault(require("../models/pettyCashExpenseModel"));
@@ -104,6 +104,49 @@ const closeActiveFund = async (req, res) => {
     }
 };
 exports.closeActiveFund = closeActiveFund;
+const topUpActiveFund = async (req, res) => {
+    try {
+        const { amount, note } = req.body || {};
+        const num = Number(amount);
+        if (!Number.isFinite(num) || num <= 0) {
+            return res.status(400).json({ message: 'amount (>0) is required.' });
+        }
+        const fund = await pettyCashFundModel_1.default.findOne({ status: 'active' });
+        if (!fund)
+            return res.status(404).json({ message: 'No active fund found.' });
+        const actor = actorFromReq(req);
+        fund.initialAmount = Number(fund.initialAmount || 0) + num;
+        fund.remainingAmount = Number(fund.remainingAmount || 0) + num;
+        fund.lowBalanceNotifiedAt = null;
+        fund.topUps = [
+            ...(Array.isArray(fund.topUps) ? fund.topUps : []),
+            {
+                amount: num,
+                note: note ? String(note).trim() : '',
+                addedByName: actor.actorName,
+                addedAt: new Date(),
+            },
+        ];
+        await fund.save();
+        await (0, notifyService_1.notifyRoles)({
+            roles: ALLOWED_ROLES,
+            category: 'pettyCashLow',
+            notification: {
+                type: 'PETTY_CASH_CREATED',
+                title: 'Petty Cash Fund Topped Up',
+                message: `${actor.actorName} added RWF ${num.toLocaleString()} to ${fund.name}.`,
+                fundId: String(fund._id),
+                severity: 'info',
+                link: '/petty-cash',
+            },
+        });
+        res.json(fund);
+    }
+    catch (e) {
+        res.status(500).json({ message: e?.message || 'Failed to top up fund.' });
+    }
+};
+exports.topUpActiveFund = topUpActiveFund;
 // --------------------
 // Expenses
 // --------------------

@@ -14,6 +14,7 @@ router.get('/funds/active', authMiddleware_1.authenticate, (0, authMiddleware_1.
 router.get('/funds', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ROLES), pettyCashController_1.listFunds);
 router.post('/funds', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ROLES), pettyCashController_1.createFund);
 router.post('/funds/close', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ROLES), pettyCashController_1.closeActiveFund);
+router.post('/funds/top-up', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ROLES), pettyCashController_1.topUpActiveFund);
 // Expenses
 router.get('/funds/:fundId/expenses', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ROLES), pettyCashController_1.listExpensesForFund);
 router.get('/cases/:caseId/expenses', authMiddleware_1.authenticate, (0, authMiddleware_1.authorize)(ROLES), pettyCashController_1.listExpensesForCase);

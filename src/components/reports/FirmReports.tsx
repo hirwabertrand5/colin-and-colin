@@ -118,12 +118,17 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
           onTimeTasks: t.onTimeTasks || 0,
           lateTasks: t.lateTasks || 0,
           overdueTasks: t.overdueTasks || 0,
+          excellentTasks: t.excellentTasks || 0,
+          goodTasks: t.goodTasks || 0,
+          delayedTasks: t.delayedTasks || 0,
+          riskTasks: t.riskTasks || 0,
+          averageTimeUsedPercent: t.averageTimeUsedPercent ?? '',
         }))
       )
     );
     lines.push('');
 
-    lines.push('Case Types');
+    lines.push('Practice Paths');
     lines.push(
       toCsv(
         data.caseTypes.map((c) => ({
@@ -275,12 +280,12 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
 
           {/* Case Distribution */}
           <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Case Distribution by Type</h2>
+            <h2 className="font-semibold text-gray-900 mb-4">Case Distribution by Practice Path</h2>
 
             {!data ? (
               <div className="text-gray-500">No data.</div>
             ) : data.caseTypes.length === 0 ? (
-              <div className="text-gray-500">No case types available.</div>
+              <div className="text-gray-500">No practice paths available.</div>
             ) : (
               <div className="space-y-3">
                 {data.caseTypes.map((item) => {
@@ -333,7 +338,7 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Revenue by Case Type (Billed)</h2>
+            <h2 className="font-semibold text-gray-900 mb-4">Revenue by Practice Path (Billed)</h2>
 
             {!data ? (
               <div className="text-gray-500">No data.</div>
@@ -355,7 +360,39 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
         <div className="space-y-6">
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <h2 className="font-semibold text-gray-900 mb-2">Productivity Summary</h2>
-            
+            {!data ? (
+              <div className="text-gray-500">No data.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                {[
+                  ['Excellent', data.team.reduce((s, m) => s + (m.excellentTasks || 0), 0), 'bg-green-600'],
+                  ['Good', data.team.reduce((s, m) => s + (m.goodTasks || 0), 0), 'bg-yellow-500'],
+                  ['Delayed', data.team.reduce((s, m) => s + (m.delayedTasks || 0), 0), 'bg-yellow-500'],
+                  ['Risk', data.team.reduce((s, m) => s + (m.riskTasks || 0), 0), 'bg-red-600'],
+                ].map(([label, value, color]) => {
+                  const total = data.team.reduce(
+                    (s, m) =>
+                      s +
+                      (m.excellentTasks || 0) +
+                      (m.goodTasks || 0) +
+                      (m.delayedTasks || 0) +
+                      (m.riskTasks || 0),
+                    0
+                  );
+                  const pct = total ? Math.round((Number(value) / total) * 100) : 0;
+                  return (
+                    <div key={String(label)} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
+                        {label}
+                      </div>
+                      <div className="mt-2 text-2xl font-semibold text-gray-900">{pct}%</div>
+                      <div className="text-xs text-gray-500">{String(value)} completed tasks</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-6">
@@ -374,6 +411,7 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">On Time</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Late</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Overdue</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Deadline Score</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Hours</th>
                   </tr>
                 </thead>
@@ -387,6 +425,17 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
                       <td className="px-4 py-3 text-sm text-gray-700">{member.onTimeTasks || 0}</td>
                       <td className="px-4 py-3 text-sm text-yellow-700">{member.lateTasks || 0}</td>
                       <td className="px-4 py-3 text-sm text-red-700">{member.overdueTasks || 0}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">
+                        <div className="flex gap-1.5 flex-wrap">
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">{member.excellentTasks || 0}</span>
+                          <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">{member.goodTasks || 0}</span>
+                          <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">{member.delayedTasks || 0}</span>
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">{member.riskTasks || 0}</span>
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500">
+                          Avg used: {member.averageTimeUsedPercent == null ? '—' : `${member.averageTimeUsedPercent}%`}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{member.billableHours}</td>
                     </tr>
                   ))}
@@ -401,7 +450,7 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
         <div className="space-y-6">
           <div className="bg-white border border-gray-200 rounded-lg">
             <div className="px-5 py-4 border-b border-gray-200">
-              <h2 className="font-semibold text-gray-900">Case Analytics by Type</h2>
+              <h2 className="font-semibold text-gray-900">Case Analytics by Practice Path</h2>
             </div>
 
             {!data ? (
@@ -411,7 +460,7 @@ export default function FirmReports({ userRole }: FirmReportsProps) {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase">Case Type</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase">Practice Path</th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase">Active</th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase">Closed</th>
                       <th className="px-5 py-3 text-left text-xs font-medium text-gray-700 uppercase">Avg Duration</th>

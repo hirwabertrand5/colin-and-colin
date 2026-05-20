@@ -17,6 +17,12 @@ export interface PettyCashFund {
 
   lowBalancePercent: number;
   lowBalanceNotifiedAt?: string | null;
+  topUps?: Array<{
+    amount: number;
+    note?: string;
+    addedByName: string;
+    addedAt: string;
+  }>;
 
   createdByName: string;
   createdAt: string;
@@ -99,6 +105,19 @@ export const closeActivePettyCashFund = async (): Promise<void> => {
     headers: { Authorization: `Bearer ${getToken()}` },
   });
   await handleAuth(res);
+};
+
+export const topUpActivePettyCashFund = async (payload: { amount: number; note?: string }): Promise<PettyCashFund> => {
+  const res = await fetch(`${API_URL}/petty-cash/funds/top-up`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  await handleAuth(res);
+  return res.json();
 };
 
 export const listExpensesForFund = async (fundId: string): Promise<PettyCashExpense[]> => {

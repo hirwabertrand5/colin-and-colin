@@ -5,6 +5,7 @@ import {
   listFunds,
   createFund,
   closeActiveFund,
+  topUpActiveFund,
   listExpensesForFund,
   listExpensesForCase,
   createExpense,
@@ -22,6 +23,7 @@ router.get('/funds/active', authenticate, authorize(ROLES), getActiveFund);
 router.get('/funds', authenticate, authorize(ROLES), listFunds);
 router.post('/funds', authenticate, authorize(ROLES), createFund);
 router.post('/funds/close', authenticate, authorize(ROLES), closeActiveFund);
+router.post('/funds/top-up', authenticate, authorize(ROLES), topUpActiveFund);
 
 // Expenses
 router.get('/funds/:fundId/expenses', authenticate, authorize(ROLES), listExpensesForFund);

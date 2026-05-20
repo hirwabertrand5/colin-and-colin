@@ -16,6 +16,12 @@ export interface IPettyCashFund extends Document {
 
   lowBalancePercent: number; // fixed 20 for now
   lowBalanceNotifiedAt?: Date | null;
+  topUps?: Array<{
+    amount: number;
+    note?: string;
+    addedByName: string;
+    addedAt: Date;
+  }>;
 
   createdByUserId?: mongoose.Types.ObjectId;
   createdByName: string;
@@ -39,6 +45,20 @@ const PettyCashFundSchema = new Schema<IPettyCashFund>(
 
     lowBalancePercent: { type: Number, default: 20 },
     lowBalanceNotifiedAt: { type: Date, default: null },
+    topUps: {
+      type: [
+        new Schema(
+          {
+            amount: { type: Number, required: true, min: 0 },
+            note: { type: String, trim: true },
+            addedByName: { type: String, required: true },
+            addedAt: { type: Date, default: Date.now },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
 
     createdByUserId: { type: Schema.Types.ObjectId, ref: 'User' },
     createdByName: { type: String, required: true },

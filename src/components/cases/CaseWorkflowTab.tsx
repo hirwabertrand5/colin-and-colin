@@ -11,9 +11,8 @@ import {
 import { getWorkflowTemplateById, WorkflowTemplate } from '../../services/workflowService';
 import {
   formatDueCountdown,
-  getDueRemainingRatio,
   getUrgencyClass,
-  getUrgencyColorFromRatio,
+  getUrgencyColorForDueDate,
 } from '../../utils/workflowDeadline';
 
 type Props = {
@@ -226,7 +225,7 @@ export default function CaseWorkflowTab({ caseId, canCompleteSteps, canUpload, o
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span
                   className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${getUrgencyClass(
-                    getUrgencyColorFromRatio(getDueRemainingRatio(s.startAt, s.dueAt))
+                    getUrgencyColorForDueDate(s.dueAt, s.startAt)
                   )}`}
                   title={s.dueAt ? `Due: ${new Date(s.dueAt).toLocaleString()}` : 'No due date'}
                 >

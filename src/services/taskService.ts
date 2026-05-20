@@ -38,6 +38,7 @@ export interface TaskData {
   approvalStatus: TaskApprovalStatus;
   submittedAt?: string;
   approvedAt?: string;
+  completedAt?: string;
   approvedBy?: string;
   approvalComment?: string;
 

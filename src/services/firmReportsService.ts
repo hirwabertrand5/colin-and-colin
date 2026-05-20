@@ -23,6 +23,11 @@ export type FirmReportResponse = {
     onTimeTasks?: number;
     lateTasks?: number;
     overdueTasks?: number;
+    excellentTasks?: number;
+    goodTasks?: number;
+    delayedTasks?: number;
+    riskTasks?: number;
+    averageTimeUsedPercent?: number | null;
   }>;
   caseTypes: Array<{
     type: string;

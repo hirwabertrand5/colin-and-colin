@@ -60,6 +60,7 @@ import {
   WorkflowTemplate,
 } from '../../services/workflowService';
 import { LEGAL_SERVICES_TREE, ServiceNode } from '../../constants/legalServicesTree';
+import { getCasePracticePath } from '../../utils/caseLabels';
 
 const API_URL = import.meta.env.VITE_API_URL;
 const BACKEND_URL = API_URL ? API_URL.replace(/\/api\/?$/, '') : '';
@@ -1327,7 +1328,7 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
               <span
                 className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${getServicePathAccent(caseData.caseType)}`}
               >
-                {caseData.caseType}
+                {getCasePracticePath(caseData)}
               </span>
             </div>
 
@@ -1354,8 +1355,8 @@ const CaseWorkspace: React.FC<CaseWorkspaceProps> = ({ userRole }) => {
 
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Computed Case Type</p>
-                    <p className="mt-1 text-sm font-semibold text-gray-900">{caseData.caseType}</p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Selected Practice Path</p>
+                    <p className="mt-1 text-sm font-semibold text-gray-900">{getCasePracticePath(caseData)}</p>
                   </div>
                   <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
                     <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Suggested Matter Type</p>

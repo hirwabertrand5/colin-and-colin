@@ -1,4 +1,5 @@
 export type UrgencyColor = 'green' | 'yellow' | 'red' | 'gray';
+export type DeadlineZone = 'excellent' | 'good' | 'delayed' | 'risk' | 'untracked';
 
 export const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
@@ -19,8 +20,28 @@ export const getDueRemainingRatio = (startAt?: Date | string, dueAt?: Date | str
 export const getUrgencyColorFromRatio = (ratio: number | undefined): UrgencyColor => {
   if (ratio === undefined) return 'gray';
   if (ratio > 0.5) return 'green';
-  if (ratio > 0.25) return 'yellow';
+  if (ratio > 0.15) return 'yellow';
   return 'red';
+};
+
+export const getUrgencyColorForDueDate = (
+  dueAt?: Date | string,
+  startAt?: Date | string,
+  now = new Date()
+): UrgencyColor => {
+  if (!dueAt) return 'gray';
+  const d = dueAt instanceof Date ? dueAt : new Date(dueAt);
+  const dueMs = d.getTime();
+  if (!Number.isFinite(dueMs)) return 'gray';
+
+  const ratio = getDueRemainingRatio(startAt, dueAt, now);
+  if (ratio !== undefined) return getUrgencyColorFromRatio(ratio);
+
+  const hoursLeft = (dueMs - now.getTime()) / (1000 * 60 * 60);
+  if (hoursLeft <= 0) return 'red';
+  if (hoursLeft <= 48) return 'red';
+  if (hoursLeft <= 24 * 7) return 'yellow';
+  return 'green';
 };
 
 export const getUrgencyClass = (color: UrgencyColor) => {
@@ -31,14 +52,55 @@ export const getUrgencyClass = (color: UrgencyColor) => {
   return 'bg-gray-500 text-white border-gray-600';
 };
 
-export const formatDueCountdown = (dueAt?: Date | string) => {
+export const getPerformanceZoneFromUsedRatio = (ratio: number | undefined): DeadlineZone => {
+  if (ratio === undefined) return 'untracked';
+  if (ratio <= 0.25) return 'excellent';
+  if (ratio <= 0.55) return 'good';
+  if (ratio <= 0.85) return 'delayed';
+  return 'risk';
+};
+
+export const getZoneColor = (zone: DeadlineZone): UrgencyColor => {
+  if (zone === 'excellent') return 'green';
+  if (zone === 'good') return 'yellow';
+  if (zone === 'delayed') return 'yellow';
+  if (zone === 'risk') return 'red';
+  return 'gray';
+};
+
+export const getTimeUsedRatio = (startAt?: Date | string, endAt?: Date | string, dueAt?: Date | string) => {
+  if (!startAt || !endAt || !dueAt) return undefined;
+  const s = startAt instanceof Date ? startAt : new Date(startAt);
+  const e = endAt instanceof Date ? endAt : new Date(endAt);
+  const d = dueAt instanceof Date ? dueAt : new Date(dueAt);
+  const total = d.getTime() - s.getTime();
+  const used = e.getTime() - s.getTime();
+  if (!Number.isFinite(total) || !Number.isFinite(used) || total <= 0) return undefined;
+  return Math.max(0, used / total);
+};
+
+export const formatDurationCountdown = (ms: number) => {
+  const abs = Math.abs(ms);
+  const minute = 1000 * 60;
+  const hour = minute * 60;
+  const day = hour * 24;
+  const month = day * 30;
+  const months = Math.floor(abs / month);
+  const days = Math.floor((abs % month) / day);
+  const hours = Math.floor((abs % day) / hour);
+  const minutes = Math.floor((abs % hour) / minute);
+  if (months > 0) return `${months}mo ${days}d ${hours}h`;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${Math.max(0, minutes)}m`;
+};
+
+export const formatDueCountdown = (dueAt?: Date | string, now = new Date()) => {
   if (!dueAt) return 'No deadline';
   const d = dueAt instanceof Date ? dueAt : new Date(dueAt);
   const ms = d.getTime();
   if (!Number.isFinite(ms)) return 'No deadline';
-  const days = Math.ceil((ms - Date.now()) / (1000 * 60 * 60 * 24));
-  if (days < 0) return `${Math.abs(days)}d overdue`;
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Tomorrow';
-  return `${days}d`;
+  const diff = ms - now.getTime();
+  if (diff < 0) return `${formatDurationCountdown(diff)} overdue`;
+  return `${formatDurationCountdown(diff)} left`;
 };

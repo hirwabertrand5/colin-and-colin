@@ -31,6 +31,35 @@ const monthKey = (d) => {
     const m = String(d.getMonth() + 1).padStart(2, '0');
     return `${y}-${m}`;
 };
+const selectedPathLabel = (c) => {
+    const path = Array.isArray(c?.legalServicePath) ? c.legalServicePath : [];
+    const selected = path
+        .map((item) => String(item?.label || '').trim())
+        .filter(Boolean);
+    return selected.length
+        ? selected.join(' / ')
+        : String(c?.matterType || c?.workflow || c?.caseType || 'Unclassified');
+};
+const getPerformanceZone = (task) => {
+    if (!task?.createdAt || !task?.completedAt || !task?.dueDate)
+        return null;
+    const assignedAt = new Date(task.createdAt);
+    const completedAt = new Date(task.completedAt);
+    const dueAt = new Date(`${task.dueDate}T23:59:59.999`);
+    const totalMs = dueAt.getTime() - assignedAt.getTime();
+    const usedMs = completedAt.getTime() - assignedAt.getTime();
+    if (!Number.isFinite(totalMs) || !Number.isFinite(usedMs) || totalMs <= 0)
+        return null;
+    const usedRatio = Math.max(0, usedMs / totalMs);
+    const usedPercent = Math.round(usedRatio * 1000) / 10;
+    if (usedRatio <= 0.25)
+        return { zone: 'excellent', usedPercent };
+    if (usedRatio <= 0.55)
+        return { zone: 'good', usedPercent };
+    if (usedRatio <= 0.85)
+        return { zone: 'delayed', usedPercent };
+    return { zone: 'risk', usedPercent };
+};
 // GET /api/reports/firm?range=weekly|monthly|quarterly|yearly&from=YYYY-MM-DD&to=YYYY-MM-DD
 const getFirmReports = async (req, res) => {
     try {
@@ -85,7 +114,7 @@ const getFirmReports = async (req, res) => {
                 status: 'Completed',
                 completedAt: { $gte: fromDate, $lte: toDate },
             })
-                .select('assignee completedAt dueDate caseId')
+                .select('assignee completedAt dueDate caseId createdAt')
                 .lean(),
             taskTimeLogModel_1.default.find({
                 loggedAt: { $gte: fromDate, $lte: toDate },
@@ -106,6 +135,11 @@ const getFirmReports = async (req, res) => {
         const earlyByName = new Map();
         const onTimeByName = new Map();
         const lateByName = new Map();
+        const excellentByName = new Map();
+        const goodByName = new Map();
+        const delayedByName = new Map();
+        const riskByName = new Map();
+        const usedPercentByName = new Map();
         const completedCaseIds = Array.from(new Set(tasksCompleted.map((t) => String(t.caseId)).filter(Boolean)));
         const completedCases = await caseModel_1.default.find({ _id: { $in: completedCaseIds } })
             .select('_id workflowProgress.completedValue')
@@ -132,6 +166,18 @@ const getFirmReports = async (req, res) => {
                     onTimeByName.set(name, (onTimeByName.get(name) || 0) + 1);
                 else
                     lateByName.set(name, (lateByName.get(name) || 0) + 1);
+            }
+            const perf = getPerformanceZone(t);
+            if (perf) {
+                if (perf.zone === 'excellent')
+                    excellentByName.set(name, (excellentByName.get(name) || 0) + 1);
+                if (perf.zone === 'good')
+                    goodByName.set(name, (goodByName.get(name) || 0) + 1);
+                if (perf.zone === 'delayed')
+                    delayedByName.set(name, (delayedByName.get(name) || 0) + 1);
+                if (perf.zone === 'risk')
+                    riskByName.set(name, (riskByName.get(name) || 0) + 1);
+                usedPercentByName.set(name, [...(usedPercentByName.get(name) || []), perf.usedPercent]);
             }
             const caseId = String(t.caseId || '');
             const taskShare = (caseEarnedById.get(caseId) || 0) / Math.max(1, completedTaskCountByCase.get(caseId) || 1);
@@ -167,47 +213,66 @@ const getFirmReports = async (req, res) => {
                 onTimeTasks: onTimeByName.get(name) || 0,
                 lateTasks: lateByName.get(name) || 0,
                 overdueTasks: overdueByName.get(name) || 0,
+                excellentTasks: excellentByName.get(name) || 0,
+                goodTasks: goodByName.get(name) || 0,
+                delayedTasks: delayedByName.get(name) || 0,
+                riskTasks: riskByName.get(name) || 0,
+                averageTimeUsedPercent: (() => {
+                    const values = usedPercentByName.get(name) || [];
+                    if (!values.length)
+                        return null;
+                    return Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10;
+                })(),
             };
         })
             .sort((a, b) => b.activeCases - a.activeCases);
         // -----------------------------
         // Case analytics by type + revenue by type (in range)
         // -----------------------------
-        const caseTypeAgg = await caseModel_1.default.aggregate([
-            {
-                $group: {
-                    _id: '$caseType',
-                    active: { $sum: { $cond: [{ $ne: ['$status', 'Closed'] }, 1, 0] } },
-                    closed: { $sum: { $cond: [{ $eq: ['$status', 'Closed'] }, 1, 0] } },
-                    avgDurationDays: {
-                        $avg: {
-                            $cond: [
-                                { $eq: ['$status', 'Closed'] },
-                                { $divide: [{ $subtract: ['$updatedAt', '$createdAt'] }, 1000 * 60 * 60 * 24] },
-                                null,
-                            ],
-                        },
-                    },
-                },
-            },
-            { $project: { type: '$_id', active: 1, closed: 1, avgDurationDays: 1, _id: 0 } },
-            { $sort: { type: 1 } },
-        ]);
+        const casesForAnalytics = await caseModel_1.default.find()
+            .select('caseType matterType workflow legalServicePath status updatedAt createdAt')
+            .lean();
+        const caseAnalyticsByPath = new Map();
+        for (const c of casesForAnalytics) {
+            const type = selectedPathLabel(c);
+            const current = caseAnalyticsByPath.get(type) || {
+                type,
+                active: 0,
+                closed: 0,
+                durationTotal: 0,
+                durationCount: 0,
+            };
+            const closed = String(c.status || '').toLowerCase() === 'closed';
+            if (closed) {
+                current.closed += 1;
+                const duration = (new Date(c.updatedAt).getTime() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+                if (Number.isFinite(duration)) {
+                    current.durationTotal += duration;
+                    current.durationCount += 1;
+                }
+            }
+            else {
+                current.active += 1;
+            }
+            caseAnalyticsByPath.set(type, current);
+        }
         const caseIds = Array.from(new Set(invoicesInRange.map((i) => String(i.caseId)).filter(Boolean)));
         const casesForInvoices = await caseModel_1.default.find({ _id: { $in: caseIds } })
-            .select('_id caseType')
+            .select('_id caseType matterType workflow legalServicePath')
             .lean();
-        const caseTypeById = new Map(casesForInvoices.map((c) => [String(c._id), c.caseType]));
+        const caseTypeById = new Map(casesForInvoices.map((c) => [String(c._id), selectedPathLabel(c)]));
         const revenueByType = new Map();
         for (const inv of invoicesInRange) {
             const ct = caseTypeById.get(String(inv.caseId)) || 'Unknown';
             revenueByType.set(ct, (revenueByType.get(ct) || 0) + (Number(inv.amount) || 0));
         }
-        const caseTypes = caseTypeAgg.map((row) => ({
-            ...row,
-            avgDurationDays: row.avgDurationDays ? Math.round(row.avgDurationDays) : null,
+        const caseTypes = Array.from(caseAnalyticsByPath.values()).map((row) => ({
+            type: row.type,
+            active: row.active,
+            closed: row.closed,
+            avgDurationDays: row.durationCount > 0 ? Math.round(row.durationTotal / row.durationCount) : null,
             revenueBilled: Math.round((revenueByType.get(row.type) || 0) * 100) / 100,
-        }));
+        })).sort((a, b) => a.type.localeCompare(b.type));
         // Billing trend by month
         const monthsMap = new Map();
         for (const inv of invoicesInRange) {
