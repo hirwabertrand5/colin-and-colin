@@ -254,7 +254,6 @@ export default function CaseList({ userRole }: CaseListProps) {
                   'No.',
                   'Case No.',
                   'Parties',
-                  'Practice Path',
                   'Workflow',
                   'Current Step',
                   'Assigned To',
@@ -282,10 +281,6 @@ export default function CaseList({ userRole }: CaseListProps) {
                   </td>
                   <td className="px-6 py-5 text-sm font-medium text-gray-900">{item.caseNo}</td>
                   <td className="px-6 py-5 text-sm text-gray-900">{item.parties}</td>
-                  <td className="px-6 py-5 text-sm text-gray-700">
-                    <div className="max-w-[280px] font-medium text-gray-900">{getCasePracticePath(item)}</div>
-                    <div className="mt-1 text-xs text-gray-500">{item.workflow || item.matterType || item.caseType}</div>
-                  </td>
                   <td className="px-6 py-5 text-sm text-gray-700">{item.workflow || item.matterType || '—'}</td>
 
                   <td className="px-6 py-5 text-sm text-gray-700">
